@@ -71,12 +71,13 @@ class CubeDetector:
     def __init__(self):
         self.color_detector = ColorDetector()
 
-    def process_frame(self, frame):
+    def process_frame(self, frame, calibration_mode=False):
         """
         Process the frame to find a 3x3 Rubik's cube face.
         Returns:
             annotated_frame: Frame with drawings
             face_colors: List of 9 color strings ('R', 'G', etc.) if detected, else None.
+            hsv_rois: List of the 9 HSV numpy arrays corresponding to the center of each square.
         """
         annotated_frame = frame.copy()
         
@@ -154,6 +155,7 @@ class CubeDetector:
                 # Extract colors and draw
                 hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
                 face_colors = []
+                hsv_rois = []
                 
                 for idx, face_data in enumerate(sorted_faces):
                     approx = face_data['approx']
@@ -166,26 +168,34 @@ class CubeDetector:
                     
                     if roi.size == 0:
                         face_colors.append('U')
+                        hsv_rois.append(None)
                         continue
                         
-                    detected_color = self.color_detector.detect_color(roi)
-                    face_colors.append(detected_color)
+                    hsv_rois.append(roi)
                     
-                    # Draw bounding box and color text
-                    bgr_color = self.color_detector.color_bgr.get(detected_color, (255,255,255))
-                    cv2.drawContours(annotated_frame, [approx], -1, bgr_color, 3)
-                    
-                    # Inner center circle
                     cx, cy = face_data['cx'], face_data['cy']
-                    cv2.circle(annotated_frame, (cx, cy), 5, bgr_color, -1)
-                    cv2.putText(annotated_frame, detected_color, (x, y - 10), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, bgr_color, 2)
+                    
+                    if not calibration_mode:
+                        detected_color = self.color_detector.detect_color(roi)
+                        face_colors.append(detected_color)
+                        
+                        # Draw bounding box and color text
+                        bgr_color = self.color_detector.color_bgr.get(detected_color, (255,255,255))
+                        cv2.drawContours(annotated_frame, [approx], -1, bgr_color, 3)
+                        
+                        # Inner center circle
+                        cv2.circle(annotated_frame, (cx, cy), 5, bgr_color, -1)
+                        cv2.putText(annotated_frame, detected_color, (x, y - 10), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, bgr_color, 2)
+                    else:
+                        face_colors.append('U')
+                        cv2.drawContours(annotated_frame, [approx], -1, (255, 255, 255), 3)
+                        cv2.circle(annotated_frame, (cx, cy), 5, (255, 255, 255), -1)
                     
                 # If we couldn't detect some colors reliably, we might return None or let caller handle it.
-                if 'U' in face_colors:
-                    # Could return None, but let's return it to see what's wrong during debug
+                if 'U' in face_colors and not calibration_mode:
                     pass
                 
-                return annotated_frame, face_colors
+                return annotated_frame, face_colors, hsv_rois
 
-        return annotated_frame, None
+        return annotated_frame, None, None

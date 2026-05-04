@@ -1,22 +1,134 @@
 import cv2
 import argparse
 import time
+import numpy as np
 from vision import CubeDetector
 from cube_state import CubeState
 from ui import FaceDisplay
 from solver_utils import solve_cube
 
-def run_camera():
+def calibrate_colors(cap, detector):
+    """
+    Guides the user to calibrate the 6 colors using a solved cube.
+    """
+    colors_to_calibrate = [
+        ('W', 'White'),
+        ('Y', 'Yellow'),
+        ('G', 'Green'),
+        ('B', 'Blue'),
+        ('O', 'Orange'),
+        ('R', 'Red')
+    ]
+    
+    calibrated_ranges = {}
+    current_idx = 0
+    
+    log_file = "calibration_log.txt"
+    import datetime
+    with open(log_file, "a") as f:
+        f.write(f"\n--- Calibration Session: {datetime.datetime.now()} ---\n")
+
+    def log_msg(msg):
+        print(msg)
+        with open(log_file, "a") as f:
+            f.write(msg + "\n")
+
+    log_msg("\n--- Color Calibration Mode ---")
+    log_msg("Please show a SOLVED face of the cube to the camera.")
+    
+    while current_idx < len(colors_to_calibrate):
+        color_code, color_name = colors_to_calibrate[current_idx]
+        
+        ret, frame = cap.read()
+        if not ret:
+            break
+            
+        annotated_frame, face_colors, hsv_rois = detector.process_frame(frame, calibration_mode=True)
+        
+        instructions = f"Show SOLVED {color_name} face. Press 'c' to capture."
+        cv2.putText(annotated_frame, instructions, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.putText(annotated_frame, "Press 'q' to skip calibration.", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
+        
+        cv2.imshow('Rubik Cube Detection', annotated_frame)
+        
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('c') and hsv_rois and len(hsv_rois) == 9:
+            # Calculate min and max HSV for the 9 ROIs
+            all_hsv_pixels = []
+            for roi in hsv_rois:
+                if roi is not None and roi.size > 0:
+                    # Reshape to a list of pixels
+                    pixels = roi.reshape(-1, 3)
+                    all_hsv_pixels.append(pixels)
+            
+            if all_hsv_pixels:
+                all_hsv_pixels = np.vstack(all_hsv_pixels)
+                
+                # Use percentiles to ignore outliers
+                min_hsv = np.percentile(all_hsv_pixels, 5, axis=0)
+                max_hsv = np.percentile(all_hsv_pixels, 95, axis=0)
+                
+                # Add padding
+                min_hsv[0] = max(0, min_hsv[0] - 5)   # H padding
+                min_hsv[1] = max(50, min_hsv[1] - 30) # S padding
+                min_hsv[2] = max(50, min_hsv[2] - 30) # V padding
+                
+                max_hsv[0] = min(179, max_hsv[0] + 5) # H padding
+                max_hsv[1] = min(255, max_hsv[1] + 30)# S padding
+                max_hsv[2] = min(255, max_hsv[2] + 30)# V padding
+                
+                calibrated_ranges[color_code] = [(np.array(min_hsv, dtype=np.uint8), np.array(max_hsv, dtype=np.uint8))]
+                print(f"[{color_name}] Calibrated: Min {min_hsv} Max {max_hsv}")
+                
+                current_idx += 1
+                time.sleep(0.5) # small pause
+                
+        elif key == ord('q'):
+            print("Calibration skipped.")
+            return False
+            
+    # Apply calibrated ranges
+    detector.color_detector.color_ranges = calibrated_ranges
+    print("\nCalibration Complete!")
+    print("Scramble your cube. Press 's' to start scanning.")
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+            
+        cv2.putText(frame, "Calibration Complete! Scramble cube.", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.putText(frame, "Press 's' to start scanning.", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.imshow('Rubik Cube Detection', frame)
+        
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):
+            break
+        elif key == ord('q'):
+            print("Exiting...")
+            return False
+            
+    print("\nTransitioning to Scan Mode...\n")
+    return True
+
+def run_camera(skip_calibration=False):
     cap = cv2.VideoCapture(0)
     detector = CubeDetector()
     state = CubeState()
     ui = FaceDisplay()
     
+    if not skip_calibration:
+        print("Do you want to calibrate colors first? (y/n)")
+        # In a CLI we could use input(), but since we open an OpenCV window, 
+        # let's just show a prompt in the terminal and wait for input, or just jump to calibration.
+        # Actually, let's always run calibration if skip_calibration is False.
+        calibrate_colors(cap, detector)
+    
     # Stability tracking
     history = []
     STABILITY_FRAMES = 5
     
-    print("Hold the cube to the camera. Face capturing is automatic.")
+    print("Hold the SCRAMBLED cube to the camera. Face capturing is automatic.")
     print("Press 'q' to quit at any time.")
     
     solution_moves = None
@@ -26,7 +138,7 @@ def run_camera():
         if not ret:
             break
             
-        annotated_frame, face_colors = detector.process_frame(frame)
+        annotated_frame, face_colors, _ = detector.process_frame(frame, calibration_mode=False)
         
         if face_colors and 'U' not in face_colors:
             # Add to history
@@ -93,7 +205,7 @@ def run_image(image_path):
     state = CubeState()
     ui = FaceDisplay()
     
-    annotated_frame, face_colors = detector.process_frame(frame)
+    annotated_frame, face_colors, _ = detector.process_frame(frame, calibration_mode=False)
     
     if face_colors:
         print(f"Detected Colors: {face_colors}")
@@ -114,9 +226,10 @@ def run_image(image_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Rubik's Cube Solver with OpenCV")
     parser.add_argument("--image", type=str, help="Path to an image to process (optional)")
+    parser.add_argument("--skip-calibration", action="store_true", help="Skip color calibration and use default ranges")
     args = parser.parse_args()
     
     if args.image:
         run_image(args.image)
     else:
-        run_camera()
+        run_camera(skip_calibration=args.skip_calibration)
