@@ -61,7 +61,8 @@ class ColorDetector:
                 detected_color = color
                 
         # If no color is significantly present, return 'U'
-        min_pixels_required = (hsv_roi.shape[0] * hsv_roi.shape[1]) * 0.2
+        # Lowered to 10% to be more forgiving with noise/glare after calibration
+        min_pixels_required = (hsv_roi.shape[0] * hsv_roi.shape[1]) * 0.1
         if max_count < min_pixels_required:
             return 'U'
             
@@ -82,15 +83,15 @@ class CubeDetector:
         annotated_frame = frame.copy()
         
         # Apply blur directly on the color image instead of grayscale.
-        # This helps detect edges between colors with similar luminance.
-        blurred = cv2.GaussianBlur(frame, (5, 5), 0)
+        # Increased kernel size slightly to reduce glare noise
+        blurred = cv2.GaussianBlur(frame, (7, 7), 0)
         
         # Lower thresholds to catch the faint plastic creases of stickerless cubes
-        edges = cv2.Canny(blurred, 20, 50)
+        edges = cv2.Canny(blurred, 15, 40)
         
-        # Dilate edges to close gaps
+        # Dilate edges to close gaps more aggressively
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        dilated = cv2.dilate(edges, kernel, iterations=1)
+        dilated = cv2.dilate(edges, kernel, iterations=2)
         
         contours, _ = cv2.findContours(dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         
@@ -103,11 +104,12 @@ class CubeDetector:
             if len(approx) == 4:
                 area = cv2.contourArea(contour)
                 # Filter by area to remove noise and huge bounding boxes
-                if 1000 < area < 20000:
+                # Loosened lower bound slightly for cubes held further away
+                if 500 < area < 25000:
                     x, y, w, h = cv2.boundingRect(approx)
                     aspect_ratio = float(w) / h
-                    # Check if it's roughly square
-                    if 0.8 <= aspect_ratio <= 1.2:
+                    # Check if it's roughly square (widened ratio slightly to account for perspective tilt)
+                    if 0.75 <= aspect_ratio <= 1.3:
                         square_contours.append((approx, area, (x, y, w, h)))
 
         # Group contours of similar area
@@ -123,8 +125,8 @@ class CubeDetector:
                 max_area = group[0][1]
                 min_area = group[-1][1]
                 
-                # If the smallest area is at least 60% of the largest area, consider it a valid group
-                if min_area > max_area * 0.6:
+                # If the smallest area is at least 50% of the largest area, consider it a valid group
+                if min_area > max_area * 0.5:
                     found_group = group
                     break
             
@@ -153,7 +155,9 @@ class CubeDetector:
                     sorted_faces.extend(row)
                 
                 # Extract colors and draw
-                hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+                # Blur the frame heavily before HSV conversion to average out colors and ignore specular highlights
+                color_smooth = cv2.GaussianBlur(frame, (11, 11), 0)
+                hsv_frame = cv2.cvtColor(color_smooth, cv2.COLOR_BGR2HSV)
                 face_colors = []
                 hsv_rois = []
                 
@@ -162,8 +166,9 @@ class CubeDetector:
                     x, y, w, h = face_data['bbox']
                     
                     # Define a smaller ROI inside the square to avoid edges
-                    offset_x = int(w * 0.2)
-                    offset_y = int(h * 0.2)
+                    # Increased from 0.2 to 0.3 to sample only the purest center of the color block
+                    offset_x = int(w * 0.3)
+                    offset_y = int(h * 0.3)
                     roi = hsv_frame[y+offset_y:y+h-offset_y, x+offset_x:x+w-offset_x]
                     
                     if roi.size == 0:
