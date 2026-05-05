@@ -156,7 +156,7 @@ def run_camera(skip_calibration=False):
     # Stability tracking (Consensus Voting)
     from collections import Counter
     history = []
-    STABILITY_FRAMES = 15 # Gather 15 frames for consensus
+    STABILITY_FRAMES = 1 # Gather 15 frames for consensus
     
     print("Hold the SCRAMBLED cube to the camera. Face capturing is automatic.")
     print("Press 'q' to quit at any time.")

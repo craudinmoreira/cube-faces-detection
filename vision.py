@@ -1,8 +1,10 @@
 import cv2
 import numpy as np
+import json
+import os
 
 class ColorDetector:
-    def __init__(self):
+    def __init__(self, calibration_path='calibration.json'):
         # Define LAB color centers for the Rubik's cube standard colors.
         # L: 0-255, a: 0-255, b: 0-255 (OpenCV's representation of LAB)
         self.color_centers_lab = {
@@ -13,6 +15,15 @@ class ColorDetector:
             'B': np.array([82, 207, 20]),
             'W': np.array([255, 128, 128])
         }
+
+        if os.path.exists(calibration_path):
+            try:
+                with open(calibration_path) as f:
+                    data = json.load(f)
+                for color, values in data.items():
+                    self.color_centers_lab[color] = np.array(values)
+            except Exception:
+                pass
         
         # Used for drawing UI
         self.color_bgr = {
@@ -37,9 +48,10 @@ class ColorDetector:
         
         min_dist = float('inf')
         detected_color = 'U'
+        weights = np.array([0.5, 1.0, 1.0])
         
         for color, center in self.color_centers_lab.items():
-            dist = np.linalg.norm(median_lab - center)
+            dist = np.linalg.norm((median_lab - center) * weights)
             if dist < min_dist:
                 min_dist = dist
                 detected_color = color
@@ -66,16 +78,29 @@ class CubeDetector:
         square_contours = []
         for contour in contours:
             perimeter = cv2.arcLength(contour, True)
-            approx = cv2.approxPolyDP(contour, 0.1 * perimeter, True)
+            approx = cv2.approxPolyDP(contour, 0.03 * perimeter, True)
             
-            if len(approx) == 4:
+            if len(approx) == 4 and cv2.isContourConvex(approx):
                 area = cv2.contourArea(contour)
                 if 500 < area < 25000:
                     x, y, w, h = cv2.boundingRect(approx)
                     aspect_ratio = float(w) / h
                     if 0.75 <= aspect_ratio <= 1.3:
                         square_contours.append((approx, area, (x, y, w, h)))
-        return square_contours
+        return self._deduplicate(square_contours)
+
+    def _deduplicate(self, square_contours, min_dist=20):
+        unique = []
+        for item in square_contours:
+            x, y, w, h = item[2]
+            cx, cy = x + w // 2, y + h // 2
+            if not any(
+                abs(cx - (u[2][0] + u[2][2] // 2)) < min_dist and
+                abs(cy - (u[2][1] + u[2][3] // 2)) < min_dist
+                for u in unique
+            ):
+                unique.append(item)
+        return unique
 
     def _group_and_sort_squares(self, square_contours):
         if len(square_contours) < 9:
@@ -107,14 +132,24 @@ class CubeDetector:
             })
             
         centers.sort(key=lambda item: item['cy'])
-        
-        sorted_faces = []
-        for row_idx in range(3):
-            row = centers[row_idx*3:(row_idx+1)*3]
-            row.sort(key=lambda item: item['cx'])
-            sorted_faces.extend(row)
-            
-        return sorted_faces
+
+        avg_tile_h = int(np.median([c['bbox'][3] for c in centers]))
+        row_tolerance = max(10, avg_tile_h // 2)
+
+        rows = []
+        current_row = [centers[0]]
+        for c in centers[1:]:
+            if abs(c['cy'] - current_row[-1]['cy']) < row_tolerance:
+                current_row.append(c)
+            else:
+                rows.append(sorted(current_row, key=lambda i: i['cx']))
+                current_row = [c]
+        rows.append(sorted(current_row, key=lambda i: i['cx']))
+
+        if len(rows) != 3 or any(len(r) != 3 for r in rows):
+            return None
+
+        return [item for row in rows for item in row]
 
     def _extract_colors_and_draw(self, frame, annotated_frame, sorted_faces, calibration_mode):
         color_smooth = cv2.GaussianBlur(frame, (11, 11), 0)
@@ -182,7 +217,7 @@ class CubeDetector:
         enhanced_frame = self._enhance_image(frame)
         annotated_frame = enhanced_frame.copy()
         
-        square_contours = self._find_squares(enhanced_frame)
+        square_contours = self._find_squares(frame)
         sorted_faces = self._group_and_sort_squares(square_contours)
         
         if sorted_faces:
