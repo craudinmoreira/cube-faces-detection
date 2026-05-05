@@ -40,12 +40,6 @@ class ColorDetector:
         }
 
     def detect_color(self, hsv_roi):
-        # Calculate the median HSV value of the ROI
-        median_hsv = np.median(hsv_roi, axis=(0, 1))
-        
-        # Alternative: mean
-        mean_hsv = np.mean(hsv_roi, axis=(0, 1))
-        
         # Check against ranges using a more robust method: count pixels in range
         max_count = 0
         detected_color = 'U'
@@ -171,18 +165,41 @@ class CubeDetector:
                 
         return face_colors, hsv_rois
 
+    def _enhance_image(self, frame):
+        """
+        Artificially boosts the saturation of the image to help distinguish pale/washed-out colors.
+        """
+        # Convert to HSV (using float32 to prevent overflow during multiplication)
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV).astype(np.float32)
+        
+        # Boost saturation by 40%
+        hsv[:, :, 1] = hsv[:, :, 1] * 1.4
+        
+        # Slightly boost value (brightness/contrast) to make colors pop
+        hsv[:, :, 2] = hsv[:, :, 2] * 1.1
+        
+        # Clip values to ensure they stay within the valid 0-255 range
+        hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
+        hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)
+        
+        # Convert back to BGR
+        enhanced_frame = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+        return enhanced_frame
+
     def process_frame(self, frame, calibration_mode=False):
         """
         Process the frame to find a 3x3 Rubik's cube face.
         """
-        annotated_frame = frame.copy()
+        # Boost saturation before any processing happens
+        enhanced_frame = self._enhance_image(frame)
+        annotated_frame = enhanced_frame.copy()
         
-        square_contours = self._find_squares(frame)
+        square_contours = self._find_squares(enhanced_frame)
         sorted_faces = self._group_and_sort_squares(square_contours)
         
         if sorted_faces:
             face_colors, hsv_rois = self._extract_colors_and_draw(
-                frame, annotated_frame, sorted_faces, calibration_mode
+                enhanced_frame, annotated_frame, sorted_faces, calibration_mode
             )
             return annotated_frame, face_colors, hsv_rois
 

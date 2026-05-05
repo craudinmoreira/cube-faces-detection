@@ -36,6 +36,9 @@ def calibrate_colors(cap, detector):
     log_msg("\n--- Color Calibration Mode ---")
     log_msg("Please show a SOLVED face of the cube to the camera.")
     
+    roi_history = []
+    CALIBRATION_FRAMES = 15
+    
     while current_idx < len(colors_to_calibrate):
         color_code, color_name = colors_to_calibrate[current_idx]
         
@@ -45,45 +48,121 @@ def calibrate_colors(cap, detector):
             
         annotated_frame, face_colors, hsv_rois = detector.process_frame(frame, calibration_mode=True)
         
-        instructions = f"Show SOLVED {color_name} face. Press 'c' to capture."
+        if hsv_rois and len(hsv_rois) == 9 and all(r is not None for r in hsv_rois):
+            roi_history.append(hsv_rois)
+        else:
+            roi_history.clear()
+            
+        progress = int((len(roi_history) / CALIBRATION_FRAMES) * 100)
+        instructions = f"Show SOLVED {color_name} face. Auto-capturing: {progress}%"
         cv2.putText(annotated_frame, instructions, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         cv2.putText(annotated_frame, "Press 'q' to skip calibration.", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
         
         cv2.imshow('Rubik Cube Detection', annotated_frame)
         
         key = cv2.waitKey(1) & 0xFF
-        if key == ord('c') and hsv_rois and len(hsv_rois) == 9:
-            # Calculate min and max HSV for the 9 ROIs
+        
+        if len(roi_history) >= CALIBRATION_FRAMES:
+            # Calculate min and max HSV for the 9 ROIs across all accumulated frames
             all_hsv_pixels = []
-            for roi in hsv_rois:
-                if roi is not None and roi.size > 0:
-                    # Reshape to a list of pixels
-                    pixels = roi.reshape(-1, 3)
-                    all_hsv_pixels.append(pixels)
+            for history_rois in roi_history:
+                for roi in history_rois:
+                    if roi is not None and roi.size > 0:
+                        pixels = roi.reshape(-1, 3)
+                        all_hsv_pixels.append(pixels)
             
             if all_hsv_pixels:
                 all_hsv_pixels = np.vstack(all_hsv_pixels)
                 
-                # Use percentiles to ignore outliers
+                # Extract percentiles
                 min_hsv = np.percentile(all_hsv_pixels, 5, axis=0)
                 max_hsv = np.percentile(all_hsv_pixels, 95, axis=0)
                 
-                # Add padding
-                min_hsv[0] = max(0, min_hsv[0] - 5)   # H padding
-                min_hsv[1] = max(50, min_hsv[1] - 30) # S padding
-                min_hsv[2] = max(50, min_hsv[2] - 30) # V padding
+                ranges_to_save = []
                 
-                max_hsv[0] = min(179, max_hsv[0] + 5) # H padding
-                max_hsv[1] = min(255, max_hsv[1] + 30)# S padding
-                max_hsv[2] = min(255, max_hsv[2] + 30)# V padding
+                if color_code == 'W':
+                    # White: Hue doesn't matter. It's defined by very low Saturation.
+                    # With saturation boost, white might reach up to 100 max, but we must cap it
+                    # to prevent it from eating yellow/blue.
+                    min_hsv[0] = 0
+                    max_hsv[0] = 179
+                    min_hsv[1] = 0
+                    max_hsv[1] = min(100, max_hsv[1] + 20) # Cap saturation
+                    min_hsv[2] = max(80, min_hsv[2] - 30)  # Must be bright
+                    max_hsv[2] = 255
+                    ranges_to_save.append((np.array(min_hsv, dtype=np.uint8), np.array(max_hsv, dtype=np.uint8)))
+                    
+                elif color_code == 'R':
+                    # Red usually wraps around the 179/0 boundary.
+                    # Instead of a single min/max which would span 0 to 179 (eating all colors),
+                    # we check if it's wrapping.
+                    hues = all_hsv_pixels[:, 0]
+                    # If we have both very low hues and very high hues
+                    if np.any(hues < 20) and np.any(hues > 160):
+                        # Split into two ranges
+                        hues_low = hues[hues < 80]
+                        hues_high = hues[hues >= 80]
+                        
+                        min_s = max(0, min_hsv[1] - 30)
+                        max_s = min(255, max_hsv[1] + 30)
+                        min_v = max(0, min_hsv[2] - 30)
+                        max_v = min(255, max_hsv[2] + 30)
+                        
+                        if len(hues_low) > 0:
+                            h_min_low = max(0, np.percentile(hues_low, 5) - 3)
+                            h_max_low = np.percentile(hues_low, 95) + 2
+                            # Ensure low red doesn't eat orange (orange starts around 8-10 usually, 
+                            # but with sat boost we must be careful. Let's cap low red hue at 5).
+                            h_max_low = min(5, h_max_low)
+                            ranges_to_save.append((
+                                np.array([h_min_low, min_s, min_v], dtype=np.uint8),
+                                np.array([h_max_low, max_s, max_v], dtype=np.uint8)
+                            ))
+                        
+                        if len(hues_high) > 0:
+                            h_min_high = max(165, np.percentile(hues_high, 5) - 4)
+                            h_max_high = min(179, np.percentile(hues_high, 95) + 4)
+                            ranges_to_save.append((
+                                np.array([h_min_high, min_s, min_v], dtype=np.uint8),
+                                np.array([h_max_high, max_s, max_v], dtype=np.uint8)
+                            ))
+                    else:
+                        # Standard red (no wrapping observed during calibration)
+                        min_hsv[0] = max(0, min_hsv[0] - 3)
+                        min_hsv[1] = max(0, min_hsv[1] - 30)
+                        min_hsv[2] = max(0, min_hsv[2] - 30)
+                        max_hsv[0] = min(179, max_hsv[0] + 3)
+                        max_hsv[1] = min(255, max_hsv[1] + 30)
+                        max_hsv[2] = min(255, max_hsv[2] + 30)
+                        ranges_to_save.append((np.array(min_hsv, dtype=np.uint8), np.array(max_hsv, dtype=np.uint8)))
+
+                else:
+                    # Universal padding for O, Y, G, B
+                    # Orange is very close to Red, so tighter lower hue bound
+                    # Yellow is close to Green, so tighter upper bound for Y, lower bound for G
+                    h_pad_low = 1 if color_code in ['O', 'G'] else 3
+                    h_pad_high = 1 if color_code == 'Y' else 3
+                    
+                    min_hsv[0] = max(0, min_hsv[0] - h_pad_low)
+                    min_hsv[1] = max(0, min_hsv[1] - 30)
+                    min_hsv[2] = max(0, min_hsv[2] - 30)
+                    
+                    max_hsv[0] = min(179, max_hsv[0] + h_pad_high)
+                    max_hsv[1] = min(255, max_hsv[1] + 30)
+                    max_hsv[2] = min(255, max_hsv[2] + 30)
+                    
+                    ranges_to_save.append((np.array(min_hsv, dtype=np.uint8), np.array(max_hsv, dtype=np.uint8)))
                 
-                calibrated_ranges[color_code] = [(np.array(min_hsv, dtype=np.uint8), np.array(max_hsv, dtype=np.uint8))]
-                print(f"[{color_name}] Calibrated: Min {min_hsv} Max {max_hsv}")
+                calibrated_ranges[color_code] = ranges_to_save
+                
+                for r in ranges_to_save:
+                    log_msg(f"[{color_name}] Calibrated Range: Min {r[0]} Max {r[1]}")
                 
                 current_idx += 1
-                time.sleep(0.5) # small pause
+                roi_history.clear() # Reset for next color
+                time.sleep(1.0) # Pause so user can switch face
                 
-        elif key == ord('q'):
+        elif key in [ord('q'), ord('Q')]:
             print("Calibration skipped.")
             return False
             
@@ -191,9 +270,10 @@ def run_camera(skip_calibration=False):
         else:
             print("Using default hardcoded color ranges.")
     
-    # Stability tracking
+    # Stability tracking (Consensus Voting)
+    from collections import Counter
     history = []
-    STABILITY_FRAMES = 5
+    STABILITY_FRAMES = 15 # Gather 15 frames for consensus
     
     print("Hold the SCRAMBLED cube to the camera. Face capturing is automatic.")
     print("Press 'q' to quit at any time.")
@@ -207,29 +287,54 @@ def run_camera(skip_calibration=False):
             
         annotated_frame, face_colors, _ = detector.process_frame(frame, calibration_mode=False)
         
-        if face_colors and 'U' not in face_colors:
-            # Add to history
-            history.append(face_colors)
-            if len(history) > STABILITY_FRAMES:
-                history.pop(0)
+        if face_colors:
+            center_color = face_colors[4]
+            # Only accumulate if we have a valid known center
+            if center_color != 'U' and center_color in state.center_to_face:
+                # If the center color changes, reset the history
+                if history and history[0][4] != center_color:
+                    history.clear()
                 
-            # Check stability
-            if len(history) == STABILITY_FRAMES and all(x == history[0] for x in history):
-                # Face is stable
-                center_color = face_colors[4]
-                if center_color in state.center_to_face:
-                    face_name = state.center_to_face[center_color]
-                    if face_name not in state.faces:
-                        print(f"Captured {face_name} face!")
-                        state.add_face(face_colors)
-                        history.clear() # Reset history after capture
+                history.append(face_colors)
+                
+                # Provide visual feedback on capture progress
+                progress = int((len(history) / STABILITY_FRAMES) * 100)
+                cv2.putText(annotated_frame, f"Scanning {state.center_to_face[center_color]}... {progress}%", 
+                            (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                
+                if len(history) >= STABILITY_FRAMES:
+                    # Compute consensus for each of the 9 squares
+                    consensus_colors = []
+                    for i in range(9):
+                        square_colors = [f[i] for f in history]
+                        valid_colors = [c for c in square_colors if c != 'U']
                         
-                        if state.is_complete() and not solution_moves:
-                            print("All faces captured! Solving...")
-                            state_str = state.to_54_string()
-                            print(f"State String: {state_str}")
-                            solution_moves = solve_cube(state_str)
-                            print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
+                        if not valid_colors:
+                            consensus_colors.append('U')
+                        else:
+                            most_common = Counter(valid_colors).most_common(1)[0][0]
+                            consensus_colors.append(most_common)
+                            
+                    # If consensus is complete and clean
+                    if 'U' not in consensus_colors:
+                        face_name = state.center_to_face[consensus_colors[4]]
+                        if face_name not in state.faces:
+                            print(f"Captured {face_name} face!")
+                            state.add_face(consensus_colors)
+                            history.clear() # Reset history after capture
+                            
+                            if state.is_complete() and not solution_moves:
+                                print("All faces captured! Solving...")
+                                state_str = state.to_54_string()
+                                print(f"State String: {state_str}")
+                                solution_moves = solve_cube(state_str)
+                                print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
+                    
+                    # Keep the sliding window moving
+                    if len(history) > 0:
+                        history.pop(0)
+            else:
+                history.clear()
         else:
             history.clear()
 
