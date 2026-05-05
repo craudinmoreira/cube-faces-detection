@@ -72,24 +72,9 @@ class CubeDetector:
     def __init__(self):
         self.color_detector = ColorDetector()
 
-    def process_frame(self, frame, calibration_mode=False):
-        """
-        Process the frame to find a 3x3 Rubik's cube face.
-        Returns:
-            annotated_frame: Frame with drawings
-            face_colors: List of 9 color strings ('R', 'G', etc.) if detected, else None.
-            hsv_rois: List of the 9 HSV numpy arrays corresponding to the center of each square.
-        """
-        annotated_frame = frame.copy()
-        
-        # Apply blur directly on the color image instead of grayscale.
-        # Increased kernel size slightly to reduce glare noise
+    def _find_squares(self, frame):
         blurred = cv2.GaussianBlur(frame, (7, 7), 0)
-        
-        # Lower thresholds to catch the faint plastic creases of stickerless cubes
         edges = cv2.Canny(blurred, 15, 40)
-        
-        # Dilate edges to close gaps more aggressively
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         dilated = cv2.dilate(edges, kernel, iterations=2)
         
@@ -100,107 +85,105 @@ class CubeDetector:
             perimeter = cv2.arcLength(contour, True)
             approx = cv2.approxPolyDP(contour, 0.1 * perimeter, True)
             
-            # Check if it's a quadrilateral
             if len(approx) == 4:
                 area = cv2.contourArea(contour)
-                # Filter by area to remove noise and huge bounding boxes
-                # Loosened lower bound slightly for cubes held further away
                 if 500 < area < 25000:
                     x, y, w, h = cv2.boundingRect(approx)
                     aspect_ratio = float(w) / h
-                    # Check if it's roughly square (widened ratio slightly to account for perspective tilt)
                     if 0.75 <= aspect_ratio <= 1.3:
                         square_contours.append((approx, area, (x, y, w, h)))
+        return square_contours
 
-        # Group contours of similar area
-        if len(square_contours) >= 9:
-            # Sort by area descending
-            square_contours.sort(key=lambda x: x[1], reverse=True)
+    def _group_and_sort_squares(self, square_contours):
+        if len(square_contours) < 9:
+            return None
             
-            # Find a group of 9 contours with similar areas
-            # We use a sliding window approach over the sorted areas
-            found_group = None
-            for i in range(len(square_contours) - 8):
-                group = square_contours[i:i+9]
-                max_area = group[0][1]
-                min_area = group[-1][1]
-                
-                # If the smallest area is at least 50% of the largest area, consider it a valid group
-                if min_area > max_area * 0.5:
-                    found_group = group
-                    break
+        square_contours.sort(key=lambda x: x[1], reverse=True)
+        
+        found_group = None
+        for i in range(len(square_contours) - 8):
+            group = square_contours[i:i+9]
+            max_area = group[0][1]
+            min_area = group[-1][1]
             
-            if found_group:
-                # We have our 9 squares. Now sort them top-to-bottom, left-to-right.
-                # First, extract centers.
-                centers = []
-                for approx, area, bbox in found_group:
-                    x, y, w, h = bbox
-                    cx, cy = x + w//2, y + h//2
-                    centers.append({
-                        'approx': approx,
-                        'bbox': bbox,
-                        'cx': cx,
-                        'cy': cy
-                    })
+            if min_area > max_area * 0.5:
+                found_group = group
+                break
+        
+        if not found_group:
+            return None
+            
+        centers = []
+        for approx, area, bbox in found_group:
+            x, y, w, h = bbox
+            centers.append({
+                'approx': approx,
+                'bbox': bbox,
+                'cx': x + w//2,
+                'cy': y + h//2
+            })
+            
+        centers.sort(key=lambda item: item['cy'])
+        
+        sorted_faces = []
+        for row_idx in range(3):
+            row = centers[row_idx*3:(row_idx+1)*3]
+            row.sort(key=lambda item: item['cx'])
+            sorted_faces.extend(row)
+            
+        return sorted_faces
+
+    def _extract_colors_and_draw(self, frame, annotated_frame, sorted_faces, calibration_mode):
+        color_smooth = cv2.GaussianBlur(frame, (11, 11), 0)
+        hsv_frame = cv2.cvtColor(color_smooth, cv2.COLOR_BGR2HSV)
+        face_colors = []
+        hsv_rois = []
+        
+        for face_data in sorted_faces:
+            approx = face_data['approx']
+            x, y, w, h = face_data['bbox']
+            
+            offset_x = int(w * 0.3)
+            offset_y = int(h * 0.3)
+            roi = hsv_frame[y+offset_y:y+h-offset_y, x+offset_x:x+w-offset_x]
+            
+            if roi.size == 0:
+                face_colors.append('U')
+                hsv_rois.append(None)
+                continue
                 
-                # Sort by Y-coordinate to separate into rows
-                centers.sort(key=lambda item: item['cy'])
+            hsv_rois.append(roi)
+            cx, cy = face_data['cx'], face_data['cy']
+            
+            if not calibration_mode:
+                detected_color = self.color_detector.detect_color(roi)
+                face_colors.append(detected_color)
                 
-                # Split into 3 rows and sort each row by X-coordinate
-                sorted_faces = []
-                for row_idx in range(3):
-                    row = centers[row_idx*3:(row_idx+1)*3]
-                    row.sort(key=lambda item: item['cx'])
-                    sorted_faces.extend(row)
+                bgr_color = self.color_detector.color_bgr.get(detected_color, (255,255,255))
+                cv2.drawContours(annotated_frame, [approx], -1, bgr_color, 3)
+                cv2.circle(annotated_frame, (cx, cy), 5, bgr_color, -1)
+                cv2.putText(annotated_frame, detected_color, (x, y - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, bgr_color, 2)
+            else:
+                face_colors.append('U')
+                cv2.drawContours(annotated_frame, [approx], -1, (255, 255, 255), 3)
+                cv2.circle(annotated_frame, (cx, cy), 5, (255, 255, 255), -1)
                 
-                # Extract colors and draw
-                # Blur the frame heavily before HSV conversion to average out colors and ignore specular highlights
-                color_smooth = cv2.GaussianBlur(frame, (11, 11), 0)
-                hsv_frame = cv2.cvtColor(color_smooth, cv2.COLOR_BGR2HSV)
-                face_colors = []
-                hsv_rois = []
-                
-                for idx, face_data in enumerate(sorted_faces):
-                    approx = face_data['approx']
-                    x, y, w, h = face_data['bbox']
-                    
-                    # Define a smaller ROI inside the square to avoid edges
-                    # Increased from 0.2 to 0.3 to sample only the purest center of the color block
-                    offset_x = int(w * 0.3)
-                    offset_y = int(h * 0.3)
-                    roi = hsv_frame[y+offset_y:y+h-offset_y, x+offset_x:x+w-offset_x]
-                    
-                    if roi.size == 0:
-                        face_colors.append('U')
-                        hsv_rois.append(None)
-                        continue
-                        
-                    hsv_rois.append(roi)
-                    
-                    cx, cy = face_data['cx'], face_data['cy']
-                    
-                    if not calibration_mode:
-                        detected_color = self.color_detector.detect_color(roi)
-                        face_colors.append(detected_color)
-                        
-                        # Draw bounding box and color text
-                        bgr_color = self.color_detector.color_bgr.get(detected_color, (255,255,255))
-                        cv2.drawContours(annotated_frame, [approx], -1, bgr_color, 3)
-                        
-                        # Inner center circle
-                        cv2.circle(annotated_frame, (cx, cy), 5, bgr_color, -1)
-                        cv2.putText(annotated_frame, detected_color, (x, y - 10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, bgr_color, 2)
-                    else:
-                        face_colors.append('U')
-                        cv2.drawContours(annotated_frame, [approx], -1, (255, 255, 255), 3)
-                        cv2.circle(annotated_frame, (cx, cy), 5, (255, 255, 255), -1)
-                    
-                # If we couldn't detect some colors reliably, we might return None or let caller handle it.
-                if 'U' in face_colors and not calibration_mode:
-                    pass
-                
-                return annotated_frame, face_colors, hsv_rois
+        return face_colors, hsv_rois
+
+    def process_frame(self, frame, calibration_mode=False):
+        """
+        Process the frame to find a 3x3 Rubik's cube face.
+        """
+        annotated_frame = frame.copy()
+        
+        square_contours = self._find_squares(frame)
+        sorted_faces = self._group_and_sort_squares(square_contours)
+        
+        if sorted_faces:
+            face_colors, hsv_rois = self._extract_colors_and_draw(
+                frame, annotated_frame, sorted_faces, calibration_mode
+            )
+            return annotated_frame, face_colors, hsv_rois
 
         return annotated_frame, None, None

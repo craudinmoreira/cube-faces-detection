@@ -111,6 +111,63 @@ def calibrate_colors(cap, detector):
     print("\nTransitioning to Scan Mode...\n")
     return True
 
+import re
+import os
+
+def load_calibration_from_log(detector):
+    """
+    Parses the calibration_log.txt to find the most recent calibration bounds.
+    """
+    log_file = "calibration_log.txt"
+    if not os.path.exists(log_file):
+        print("No calibration_log.txt found. Using default colors.")
+        return False
+        
+    color_map = {
+        'White': 'W',
+        'Yellow': 'Y',
+        'Green': 'G',
+        'Blue': 'B',
+        'Orange': 'O',
+        'Red': 'R'
+    }
+    
+    calibrated_ranges = {}
+    
+    # Read all lines and reverse to find the latest calibration
+    with open(log_file, "r") as f:
+        lines = f.readlines()
+        
+    print("Searching for latest calibration in log...")
+    
+    # Regex to match: [Color] Calibrated: Min [ 67.  50. 127.] Max [ 86.  96. 215.]
+    # Handle optional spaces and dots
+    pattern = re.compile(r'\[(.*?)\] Calibrated: Min \[\s*([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s*\] Max \[\s*([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s*\]')
+    
+    for line in reversed(lines):
+        match = pattern.search(line)
+        if match:
+            color_name = match.group(1)
+            if color_name in color_map:
+                code = color_map[color_name]
+                if code not in calibrated_ranges:
+                    min_hsv = np.array([float(match.group(2)), float(match.group(3)), float(match.group(4))], dtype=np.uint8)
+                    max_hsv = np.array([float(match.group(5)), float(match.group(6)), float(match.group(7))], dtype=np.uint8)
+                    calibrated_ranges[code] = [(min_hsv, max_hsv)]
+                    print(f"Found {color_name}: Min {min_hsv} Max {max_hsv}")
+                    
+        # Stop if we found all 6
+        if len(calibrated_ranges) == 6:
+            break
+            
+    if len(calibrated_ranges) > 0:
+        detector.color_detector.color_ranges.update(calibrated_ranges)
+        print("Successfully loaded calibration from log!")
+        return True
+    else:
+        print("Could not parse calibration data from log. Using defaults.")
+        return False
+
 def run_camera(skip_calibration=False):
     cap = cv2.VideoCapture(0)
     detector = CubeDetector()
@@ -118,11 +175,21 @@ def run_camera(skip_calibration=False):
     ui = FaceDisplay()
     
     if not skip_calibration:
-        print("Do you want to calibrate colors first? (y/n)")
-        # In a CLI we could use input(), but since we open an OpenCV window, 
-        # let's just show a prompt in the terminal and wait for input, or just jump to calibration.
-        # Actually, let's always run calibration if skip_calibration is False.
-        calibrate_colors(cap, detector)
+        print("\n==================================")
+        print("Rubik's Cube Solver - Startup Menu")
+        print("==================================")
+        print("1. Run New Color Calibration (Recommended)")
+        print("2. Load Last Calibration from Log")
+        print("3. Skip Calibration (Use default hardcoded ranges)")
+        print("==================================")
+        choice = input("Enter your choice (1/2/3): ").strip()
+        
+        if choice == '1':
+            calibrate_colors(cap, detector)
+        elif choice == '2':
+            load_calibration_from_log(detector)
+        else:
+            print("Using default hardcoded color ranges.")
     
     # Stability tracking
     history = []
