@@ -3,29 +3,15 @@ import numpy as np
 
 class ColorDetector:
     def __init__(self):
-        # Define HSV color ranges for the Rubik's cube standard colors.
-        # These may need calibration depending on lighting.
-        # OpenCV uses H: 0-179, S: 0-255, V: 0-255
-        self.color_ranges = {
-            'R': [
-                (np.array([0, 100, 100]), np.array([3, 255, 255])),
-                (np.array([170, 100, 100]), np.array([179, 255, 255]))
-            ],
-            'O': [
-                (np.array([4, 100, 100]), np.array([25, 255, 255]))
-            ],
-            'Y': [
-                (np.array([26, 100, 100]), np.array([35, 255, 255]))
-            ],
-            'G': [
-                (np.array([36, 100, 100]), np.array([85, 255, 255]))
-            ],
-            'B': [
-                (np.array([86, 100, 100]), np.array([130, 255, 255]))
-            ],
-            'W': [
-                (np.array([0, 0, 150]), np.array([179, 60, 255]))
-            ]
+        # Define LAB color centers for the Rubik's cube standard colors.
+        # L: 0-255, a: 0-255, b: 0-255 (OpenCV's representation of LAB)
+        self.color_centers_lab = {
+            'R': np.array([136, 208, 195]),
+            'O': np.array([171, 171, 202]),
+            'Y': np.array([248, 106, 223]),
+            'G': np.array([224, 42, 211]),
+            'B': np.array([82, 207, 20]),
+            'W': np.array([255, 128, 128])
         }
         
         # Used for drawing UI
@@ -39,25 +25,27 @@ class ColorDetector:
             'U': (128, 128, 128) # Unknown
         }
 
-    def detect_color(self, hsv_roi):
-        # Check against ranges using a more robust method: count pixels in range
-        max_count = 0
+    def detect_color(self, bgr_roi):
+        if bgr_roi.size == 0:
+            return 'U'
+            
+        lab_roi = cv2.cvtColor(bgr_roi, cv2.COLOR_BGR2LAB)
+        
+        # Use median to ignore noise/glare
+        pixels = lab_roi.reshape(-1, 3)
+        median_lab = np.median(pixels, axis=0)
+        
+        min_dist = float('inf')
         detected_color = 'U'
         
-        for color, ranges in self.color_ranges.items():
-            count = 0
-            for lower, upper in ranges:
-                mask = cv2.inRange(hsv_roi, lower, upper)
-                count += cv2.countNonZero(mask)
-            
-            if count > max_count:
-                max_count = count
+        for color, center in self.color_centers_lab.items():
+            dist = np.linalg.norm(median_lab - center)
+            if dist < min_dist:
+                min_dist = dist
                 detected_color = color
                 
-        # If no color is significantly present, return 'U'
-        # Lowered to 10% to be more forgiving with noise/glare after calibration
-        min_pixels_required = (hsv_roi.shape[0] * hsv_roi.shape[1]) * 0.1
-        if max_count < min_pixels_required:
+        # Optional: threshold to prevent completely random colors from matching
+        if min_dist > 80:
             return 'U'
             
         return detected_color
@@ -67,10 +55,11 @@ class CubeDetector:
         self.color_detector = ColorDetector()
 
     def _find_squares(self, frame):
-        blurred = cv2.GaussianBlur(frame, (7, 7), 0)
-        edges = cv2.Canny(blurred, 15, 40)
+        blurred = cv2.GaussianBlur(frame, (5, 5), 0)
+        # Lowered thresholds for Canny to detect color boundaries without black lines
+        edges = cv2.Canny(blurred, 10, 30)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        dilated = cv2.dilate(edges, kernel, iterations=2)
+        dilated = cv2.dilate(edges, kernel, iterations=1)
         
         contours, _ = cv2.findContours(dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         
@@ -129,9 +118,8 @@ class CubeDetector:
 
     def _extract_colors_and_draw(self, frame, annotated_frame, sorted_faces, calibration_mode):
         color_smooth = cv2.GaussianBlur(frame, (11, 11), 0)
-        hsv_frame = cv2.cvtColor(color_smooth, cv2.COLOR_BGR2HSV)
         face_colors = []
-        hsv_rois = []
+        rois = []
         
         for face_data in sorted_faces:
             approx = face_data['approx']
@@ -139,14 +127,14 @@ class CubeDetector:
             
             offset_x = int(w * 0.3)
             offset_y = int(h * 0.3)
-            roi = hsv_frame[y+offset_y:y+h-offset_y, x+offset_x:x+w-offset_x]
+            roi = color_smooth[y+offset_y:y+h-offset_y, x+offset_x:x+w-offset_x]
             
             if roi.size == 0:
                 face_colors.append('U')
-                hsv_rois.append(None)
+                rois.append(None)
                 continue
                 
-            hsv_rois.append(roi)
+            rois.append(roi)
             cx, cy = face_data['cx'], face_data['cy']
             
             if not calibration_mode:
@@ -163,7 +151,7 @@ class CubeDetector:
                 cv2.drawContours(annotated_frame, [approx], -1, (255, 255, 255), 3)
                 cv2.circle(annotated_frame, (cx, cy), 5, (255, 255, 255), -1)
                 
-        return face_colors, hsv_rois
+        return face_colors, rois
 
     def _enhance_image(self, frame):
         """
@@ -198,9 +186,9 @@ class CubeDetector:
         sorted_faces = self._group_and_sort_squares(square_contours)
         
         if sorted_faces:
-            face_colors, hsv_rois = self._extract_colors_and_draw(
+            face_colors, rois = self._extract_colors_and_draw(
                 enhanced_frame, annotated_frame, sorted_faces, calibration_mode
             )
-            return annotated_frame, face_colors, hsv_rois
+            return annotated_frame, face_colors, rois
 
         return annotated_frame, None, None

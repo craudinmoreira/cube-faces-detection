@@ -1,0 +1,6 @@
+[White] Calibrated Range: Min [  0   0 141] Max [179  86 255]
+[Yellow] Calibrated Range: Min [ 31 152 146] Max [ 39 237 233]
+[Green] Calibrated Range: Min [ 67 223 116] Max [ 74 255 198]
+[Blue] Calibrated Range: Min [102 225  47] Max [114 255 144]
+[Orange] Calibrated Range: Min [  5 224 199] Max [ 11 255 255]
+[Red] Calibrated Range: Min [  0 225  83] Max [  7 255 168]

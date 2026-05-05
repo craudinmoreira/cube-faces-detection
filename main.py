@@ -20,21 +20,11 @@ def calibrate_colors(cap, detector):
         ('R', 'Red')
     ]
     
-    calibrated_ranges = {}
+    calibrated_centers_lab = {}
     current_idx = 0
     
-    log_file = "calibration_log.txt"
-    import datetime
-    with open(log_file, "a") as f:
-        f.write(f"\n--- Calibration Session: {datetime.datetime.now()} ---\n")
-
-    def log_msg(msg):
-        print(msg)
-        with open(log_file, "a") as f:
-            f.write(msg + "\n")
-
-    log_msg("\n--- Color Calibration Mode ---")
-    log_msg("Please show a SOLVED face of the cube to the camera.")
+    print("\n--- Color Calibration Mode ---")
+    print("Please show a SOLVED face of the cube to the camera.")
     
     roi_history = []
     CALIBRATION_FRAMES = 15
@@ -46,10 +36,10 @@ def calibrate_colors(cap, detector):
         if not ret:
             break
             
-        annotated_frame, face_colors, hsv_rois = detector.process_frame(frame, calibration_mode=True)
+        annotated_frame, face_colors, bgr_rois = detector.process_frame(frame, calibration_mode=True)
         
-        if hsv_rois and len(hsv_rois) == 9 and all(r is not None for r in hsv_rois):
-            roi_history.append(hsv_rois)
+        if bgr_rois and len(bgr_rois) == 9 and all(r is not None for r in bgr_rois):
+            roi_history.append(bgr_rois)
         else:
             roi_history.clear()
             
@@ -63,112 +53,37 @@ def calibrate_colors(cap, detector):
         key = cv2.waitKey(1) & 0xFF
         
         if len(roi_history) >= CALIBRATION_FRAMES:
-            # Calculate min and max HSV for the 9 ROIs across all accumulated frames
-            all_hsv_pixels = []
+            all_lab_pixels = []
             for history_rois in roi_history:
                 for roi in history_rois:
                     if roi is not None and roi.size > 0:
-                        pixels = roi.reshape(-1, 3)
-                        all_hsv_pixels.append(pixels)
+                        lab_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
+                        pixels = lab_roi.reshape(-1, 3)
+                        all_lab_pixels.append(pixels)
             
-            if all_hsv_pixels:
-                all_hsv_pixels = np.vstack(all_hsv_pixels)
+            if all_lab_pixels:
+                all_lab_pixels = np.vstack(all_lab_pixels)
+                median_lab = np.median(all_lab_pixels, axis=0)
+                calibrated_centers_lab[color_code] = [float(x) for x in median_lab]
+                print(f"[{color_name}] Calibrated LAB Center: {median_lab}")
                 
-                # Extract percentiles
-                min_hsv = np.percentile(all_hsv_pixels, 5, axis=0)
-                max_hsv = np.percentile(all_hsv_pixels, 95, axis=0)
-                
-                ranges_to_save = []
-                
-                if color_code == 'W':
-                    # White: Hue doesn't matter. It's defined by very low Saturation.
-                    # With saturation boost, white might reach up to 100 max, but we must cap it
-                    # to prevent it from eating yellow/blue.
-                    min_hsv[0] = 0
-                    max_hsv[0] = 179
-                    min_hsv[1] = 0
-                    max_hsv[1] = min(100, max_hsv[1] + 20) # Cap saturation
-                    min_hsv[2] = max(80, min_hsv[2] - 30)  # Must be bright
-                    max_hsv[2] = 255
-                    ranges_to_save.append((np.array(min_hsv, dtype=np.uint8), np.array(max_hsv, dtype=np.uint8)))
-                    
-                elif color_code == 'R':
-                    # Red usually wraps around the 179/0 boundary.
-                    # Instead of a single min/max which would span 0 to 179 (eating all colors),
-                    # we check if it's wrapping.
-                    hues = all_hsv_pixels[:, 0]
-                    # If we have both very low hues and very high hues
-                    if np.any(hues < 20) and np.any(hues > 160):
-                        # Split into two ranges
-                        hues_low = hues[hues < 80]
-                        hues_high = hues[hues >= 80]
-                        
-                        min_s = max(0, min_hsv[1] - 30)
-                        max_s = min(255, max_hsv[1] + 30)
-                        min_v = max(0, min_hsv[2] - 30)
-                        max_v = min(255, max_hsv[2] + 30)
-                        
-                        if len(hues_low) > 0:
-                            h_min_low = max(0, np.percentile(hues_low, 5) - 3)
-                            h_max_low = np.percentile(hues_low, 95) + 2
-                            # Ensure low red doesn't eat orange (orange starts around 8-10 usually, 
-                            # but with sat boost we must be careful. Let's cap low red hue at 5).
-                            h_max_low = min(5, h_max_low)
-                            ranges_to_save.append((
-                                np.array([h_min_low, min_s, min_v], dtype=np.uint8),
-                                np.array([h_max_low, max_s, max_v], dtype=np.uint8)
-                            ))
-                        
-                        if len(hues_high) > 0:
-                            h_min_high = max(165, np.percentile(hues_high, 5) - 4)
-                            h_max_high = min(179, np.percentile(hues_high, 95) + 4)
-                            ranges_to_save.append((
-                                np.array([h_min_high, min_s, min_v], dtype=np.uint8),
-                                np.array([h_max_high, max_s, max_v], dtype=np.uint8)
-                            ))
-                    else:
-                        # Standard red (no wrapping observed during calibration)
-                        min_hsv[0] = max(0, min_hsv[0] - 3)
-                        min_hsv[1] = max(0, min_hsv[1] - 30)
-                        min_hsv[2] = max(0, min_hsv[2] - 30)
-                        max_hsv[0] = min(179, max_hsv[0] + 3)
-                        max_hsv[1] = min(255, max_hsv[1] + 30)
-                        max_hsv[2] = min(255, max_hsv[2] + 30)
-                        ranges_to_save.append((np.array(min_hsv, dtype=np.uint8), np.array(max_hsv, dtype=np.uint8)))
-
-                else:
-                    # Universal padding for O, Y, G, B
-                    # Orange is very close to Red, so tighter lower hue bound
-                    # Yellow is close to Green, so tighter upper bound for Y, lower bound for G
-                    h_pad_low = 1 if color_code in ['O', 'G'] else 3
-                    h_pad_high = 1 if color_code == 'Y' else 3
-                    
-                    min_hsv[0] = max(0, min_hsv[0] - h_pad_low)
-                    min_hsv[1] = max(0, min_hsv[1] - 30)
-                    min_hsv[2] = max(0, min_hsv[2] - 30)
-                    
-                    max_hsv[0] = min(179, max_hsv[0] + h_pad_high)
-                    max_hsv[1] = min(255, max_hsv[1] + 30)
-                    max_hsv[2] = min(255, max_hsv[2] + 30)
-                    
-                    ranges_to_save.append((np.array(min_hsv, dtype=np.uint8), np.array(max_hsv, dtype=np.uint8)))
-                
-                calibrated_ranges[color_code] = ranges_to_save
-                
-                for r in ranges_to_save:
-                    log_msg(f"[{color_name}] Calibrated Range: Min {r[0]} Max {r[1]}")
-                
-                current_idx += 1
-                roi_history.clear() # Reset for next color
-                time.sleep(1.0) # Pause so user can switch face
+            current_idx += 1
+            roi_history.clear() # Reset for next color
+            time.sleep(1.0) # Pause so user can switch face
                 
         elif key in [ord('q'), ord('Q')]:
             print("Calibration skipped.")
             return False
             
-    # Apply calibrated ranges
-    detector.color_detector.color_ranges = calibrated_ranges
-    print("\nCalibration Complete!")
+    import json
+    with open("calibration.json", "w") as f:
+        json.dump(calibrated_centers_lab, f, indent=4)
+        
+    # Apply calibrated centers
+    for k, v in calibrated_centers_lab.items():
+        detector.color_detector.color_centers_lab[k] = np.array(v)
+        
+    print("\nCalibration Complete and saved to calibration.json!")
     print("Scramble your cube. Press 's' to start scanning.")
     
     while True:
@@ -190,61 +105,29 @@ def calibrate_colors(cap, detector):
     print("\nTransitioning to Scan Mode...\n")
     return True
 
-import re
 import os
+import json
 
 def load_calibration_from_log(detector):
     """
-    Parses the calibration_log.txt to find the most recent calibration bounds.
+    Parses calibration.json to find the most recent calibration bounds.
     """
-    log_file = "calibration_log.txt"
+    log_file = "calibration.json"
     if not os.path.exists(log_file):
-        print("No calibration_log.txt found. Using default colors.")
+        print(f"No {log_file} found. Using default colors.")
         return False
         
-    color_map = {
-        'White': 'W',
-        'Yellow': 'Y',
-        'Green': 'G',
-        'Blue': 'B',
-        'Orange': 'O',
-        'Red': 'R'
-    }
-    
-    calibrated_ranges = {}
-    
-    # Read all lines and reverse to find the latest calibration
-    with open(log_file, "r") as f:
-        lines = f.readlines()
-        
-    print("Searching for latest calibration in log...")
-    
-    # Regex to match: [Color] Calibrated: Min [ 67.  50. 127.] Max [ 86.  96. 215.]
-    # Handle optional spaces and dots
-    pattern = re.compile(r'\[(.*?)\] Calibrated: Min \[\s*([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s*\] Max \[\s*([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s*\]')
-    
-    for line in reversed(lines):
-        match = pattern.search(line)
-        if match:
-            color_name = match.group(1)
-            if color_name in color_map:
-                code = color_map[color_name]
-                if code not in calibrated_ranges:
-                    min_hsv = np.array([float(match.group(2)), float(match.group(3)), float(match.group(4))], dtype=np.uint8)
-                    max_hsv = np.array([float(match.group(5)), float(match.group(6)), float(match.group(7))], dtype=np.uint8)
-                    calibrated_ranges[code] = [(min_hsv, max_hsv)]
-                    print(f"Found {color_name}: Min {min_hsv} Max {max_hsv}")
-                    
-        # Stop if we found all 6
-        if len(calibrated_ranges) == 6:
-            break
+    try:
+        with open(log_file, "r") as f:
+            calibrated_centers = json.load(f)
             
-    if len(calibrated_ranges) > 0:
-        detector.color_detector.color_ranges.update(calibrated_ranges)
+        for code, center in calibrated_centers.items():
+            detector.color_detector.color_centers_lab[code] = np.array(center)
+            
         print("Successfully loaded calibration from log!")
         return True
-    else:
-        print("Could not parse calibration data from log. Using defaults.")
+    except Exception as e:
+        print(f"Could not parse calibration data: {e}. Using defaults.")
         return False
 
 def run_camera(skip_calibration=False):
