@@ -88,3 +88,20 @@ class CubeState:
         result[42:45] = self.faces['B'][6:9]
         
         return "".join(result)
+
+    def to_kociemba_string(self):
+        """
+        Converts the captured 6 faces into the 54-character string format
+        required by Kociemba's algorithm.
+        
+        Layout order: U, R, F, D, L, B.
+        Characters must be the face identifiers ('U', 'R', 'F', 'D', 'L', 'B').
+        """
+        if not self.is_complete():
+            raise ValueError("Cube state is not complete.")
+            
+        result = ""
+        for face_name in ['U', 'R', 'F', 'D', 'L', 'B']:
+            for color in self.faces[face_name]:
+                result += self.center_to_face[color]
+        return result

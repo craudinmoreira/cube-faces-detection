@@ -18,3 +18,18 @@ def solve_cube(state_string):
         return solver.moves
     except Exception as e:
         return f"Error solving cube: {str(e)}"
+
+def solve_cube_kociemba(state_string):
+    """
+    Solves the Rubik's cube using Kociemba's algorithm.
+    Expects a 54-character state string (U, R, F, D, L, B).
+    Returns a string of moves or an error message.
+    """
+    try:
+        import optimal.solver as sv
+        solution = sv.solve(state_string)
+        return solution
+    except ImportError:
+        return "Error: 'RubikOptimal' package not installed. Run pip install RubikOptimal"
+    except Exception as e:
+        return f"Error solving cube with Kociemba: {str(e)}"

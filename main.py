@@ -27,7 +27,7 @@ def calibrate_colors(cap, detector):
     print("Please show a SOLVED face of the cube to the camera.")
     
     roi_history = []
-    CALIBRATION_FRAMES = 15
+    CALIBRATION_FRAMES = 2
     
     while current_idx < len(colors_to_calibrate):
         color_code, color_name = colors_to_calibrate[current_idx]
@@ -212,6 +212,16 @@ def run_camera(skip_calibration=False):
                                 print(f"State String: {state_str}")
                                 solution_moves = solve_cube(state_str)
                                 print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
+                                
+                                try:
+                                    koc_str = state.to_kociemba_string()
+                                    print(f"State String (Kociemba): {koc_str}")
+                                    from solver_utils import solve_cube_kociemba
+                                    global solution_kociemba
+                                    solution_kociemba = solve_cube_kociemba(koc_str)
+                                    print(f"Solution (Kociemba): {solution_kociemba}")
+                                except Exception as e:
+                                    solution_kociemba = f"Kociemba Error: {e}"
                     
                     # Keep the sliding window moving
                     if len(history) > 0:
@@ -227,7 +237,7 @@ def run_camera(skip_calibration=False):
         # Display instructions or status on camera feed
         if state.is_complete():
             if isinstance(solution_moves, list):
-                sol_str = " ".join(solution_moves)
+                sol_str = "Std: " + " ".join(solution_moves)
                 # Split long solutions
                 if len(sol_str) > 50:
                     cv2.putText(annotated_frame, sol_str[:50], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
@@ -235,7 +245,15 @@ def run_camera(skip_calibration=False):
                 else:
                     cv2.putText(annotated_frame, sol_str, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             else:
-                cv2.putText(annotated_frame, "Solving Failed", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.putText(annotated_frame, "Std Solving Failed", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                
+            if 'solution_kociemba' in globals() and globals()['solution_kociemba']:
+                koc_str = "Koc: " + str(globals()['solution_kociemba'])
+                if len(koc_str) > 50:
+                    cv2.putText(annotated_frame, koc_str[:50], (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    cv2.putText(annotated_frame, koc_str[50:], (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                else:
+                    cv2.putText(annotated_frame, koc_str, (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         else:
             missing = ", ".join(state.get_missing_faces())
             cv2.putText(annotated_frame, f"Missing: {missing}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
