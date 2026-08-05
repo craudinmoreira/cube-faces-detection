@@ -1,4 +1,60 @@
+from collections import Counter
+
+
 class CubeState:
+    FACE_ORDER = ('U', 'R', 'F', 'D', 'L', 'B')
+
+    # Facelet positions and colors follow the URFDLB convention used by
+    # Kociemba-compatible solvers.
+    CORNER_FACELETS = (
+        (8, 9, 20),    # URF
+        (6, 18, 38),   # UFL
+        (0, 36, 47),   # ULB
+        (2, 45, 11),   # UBR
+        (29, 26, 15),  # DFR
+        (27, 44, 24),  # DLF
+        (33, 53, 42),  # DBL
+        (35, 17, 51),  # DRB
+    )
+    CORNER_COLORS = (
+        ('U', 'R', 'F'),
+        ('U', 'F', 'L'),
+        ('U', 'L', 'B'),
+        ('U', 'B', 'R'),
+        ('D', 'F', 'R'),
+        ('D', 'L', 'F'),
+        ('D', 'B', 'L'),
+        ('D', 'R', 'B'),
+    )
+    EDGE_FACELETS = (
+        (5, 10),   # UR
+        (7, 19),   # UF
+        (3, 37),   # UL
+        (1, 46),   # UB
+        (32, 16),  # DR
+        (28, 25),  # DF
+        (30, 43),  # DL
+        (34, 52),  # DB
+        (23, 12),  # FR
+        (21, 41),  # FL
+        (50, 39),  # BL
+        (48, 14),  # BR
+    )
+    EDGE_COLORS = (
+        ('U', 'R'),
+        ('U', 'F'),
+        ('U', 'L'),
+        ('U', 'B'),
+        ('D', 'R'),
+        ('D', 'F'),
+        ('D', 'L'),
+        ('D', 'B'),
+        ('F', 'R'),
+        ('F', 'L'),
+        ('B', 'L'),
+        ('B', 'R'),
+    )
+
     def __init__(self):
         # Maps face standard name (U, D, F, B, L, R) to a list of 9 color strings
         self.faces = {}
@@ -31,6 +87,172 @@ class CubeState:
 
     def is_complete(self):
         return len(self.faces) == 6
+
+    def validate_counts(self):
+        """
+        Validate the structural and color-count invariants of a captured cube.
+
+        Returns a tuple ``(is_valid, errors)`` so callers can present useful
+        feedback without relying on solver exceptions.
+        """
+        errors = []
+        expected_faces = set(self.FACE_ORDER)
+        actual_faces = set(self.faces)
+
+        missing_faces = sorted(expected_faces - actual_faces)
+        unexpected_faces = sorted(actual_faces - expected_faces)
+        if missing_faces:
+            errors.append(f"Faces ausentes: {', '.join(missing_faces)}.")
+        if unexpected_faces:
+            errors.append(f"Faces desconhecidas: {', '.join(unexpected_faces)}.")
+
+        allowed_colors = set(self.center_to_face)
+        all_colors = []
+        centers = []
+
+        for face_name in self.FACE_ORDER:
+            colors = self.faces.get(face_name)
+            if colors is None:
+                continue
+            if len(colors) != 9:
+                errors.append(
+                    f"A face {face_name} tem {len(colors)} peças; esperado: 9."
+                )
+                continue
+
+            all_colors.extend(colors)
+            center_color = colors[4]
+            centers.append(center_color)
+            expected_face = self.center_to_face.get(center_color)
+            if expected_face != face_name:
+                errors.append(
+                    f"Centro da face {face_name} é {center_color!r}, "
+                    f"que identifica {expected_face or 'nenhuma face'}."
+                )
+
+        unknown_colors = sorted(set(all_colors) - allowed_colors)
+        if unknown_colors:
+            errors.append(
+                f"Cores desconhecidas: {', '.join(repr(c) for c in unknown_colors)}."
+            )
+
+        counts = Counter(all_colors)
+        for color in self.center_to_face:
+            count = counts[color]
+            if count != 9:
+                errors.append(f"Cor {color}: {count} peças; esperado: 9.")
+
+        if len(centers) == 6 and len(set(centers)) != 6:
+            errors.append("As seis faces devem possuir centros de cores diferentes.")
+
+        return not errors, errors
+
+    @staticmethod
+    def _permutation_parity(permutation):
+        inversions = sum(
+            permutation[i] > permutation[j]
+            for i in range(len(permutation))
+            for j in range(i + 1, len(permutation))
+        )
+        return inversions % 2
+
+    def validate_solvability(self):
+        """
+        Validate whether the captured facelets describe a physically legal cube.
+
+        Besides counts and centers, this checks that every corner and edge occurs
+        exactly once, corner twists sum to zero, edge flips sum to zero, and edge
+        and corner permutations have matching parity.
+        """
+        counts_valid, errors = self.validate_counts()
+        if not counts_valid:
+            return False, errors
+
+        facelets = self.to_kociemba_string()
+        corner_permutation = []
+        corner_orientations = []
+
+        for position, indexes in enumerate(self.CORNER_FACELETS):
+            colors = tuple(facelets[index] for index in indexes)
+            orientation = next(
+                (index for index, color in enumerate(colors) if color in ('U', 'D')),
+                None,
+            )
+            if orientation is None:
+                errors.append(
+                    f"Canto na posição {position} não contém uma cor U/D: {colors}."
+                )
+                continue
+
+            side_1 = colors[(orientation + 1) % 3]
+            side_2 = colors[(orientation + 2) % 3]
+            cubie = next(
+                (
+                    index
+                    for index, expected in enumerate(self.CORNER_COLORS)
+                    if expected[1] == side_1 and expected[2] == side_2
+                ),
+                None,
+            )
+            if cubie is None:
+                errors.append(f"Canto impossível na posição {position}: {colors}.")
+                continue
+
+            corner_permutation.append(cubie)
+            corner_orientations.append(orientation % 3)
+
+        edge_permutation = []
+        edge_orientations = []
+        for position, indexes in enumerate(self.EDGE_FACELETS):
+            colors = tuple(facelets[index] for index in indexes)
+            match = next(
+                (
+                    (index, 0)
+                    for index, expected in enumerate(self.EDGE_COLORS)
+                    if colors == expected
+                ),
+                None,
+            )
+            if match is None:
+                match = next(
+                    (
+                        (index, 1)
+                        for index, expected in enumerate(self.EDGE_COLORS)
+                        if colors == expected[::-1]
+                    ),
+                    None,
+                )
+            if match is None:
+                errors.append(f"Aresta impossível na posição {position}: {colors}.")
+                continue
+
+            cubie, orientation = match
+            edge_permutation.append(cubie)
+            edge_orientations.append(orientation)
+
+        if len(corner_permutation) == 8:
+            if len(set(corner_permutation)) != 8:
+                errors.append("Há cantos duplicados ou ausentes.")
+            if sum(corner_orientations) % 3 != 0:
+                errors.append("A orientação dos cantos é fisicamente impossível.")
+
+        if len(edge_permutation) == 12:
+            if len(set(edge_permutation)) != 12:
+                errors.append("Há arestas duplicadas ou ausentes.")
+            if sum(edge_orientations) % 2 != 0:
+                errors.append("A orientação das arestas é fisicamente impossível.")
+
+        corners_complete = (
+            len(corner_permutation) == 8 and len(set(corner_permutation)) == 8
+        )
+        edges_complete = len(edge_permutation) == 12 and len(set(edge_permutation)) == 12
+        if corners_complete and edges_complete:
+            if self._permutation_parity(corner_permutation) != self._permutation_parity(
+                edge_permutation
+            ):
+                errors.append("A paridade das permutações de cantos e arestas não coincide.")
+
+        return not errors, errors
         
     def get_missing_faces(self):
         all_faces = set(self.center_to_face.values())

@@ -162,6 +162,7 @@ def run_camera(skip_calibration=False):
     print("Press 'q' to quit at any time.")
     
     solution_moves = None
+    validation_error = None
 
     while True:
         ret, frame = cap.read()
@@ -207,21 +208,29 @@ def run_camera(skip_calibration=False):
                             history.clear() # Reset history after capture
                             
                             if state.is_complete() and not solution_moves:
-                                print("All faces captured! Solving...")
-                                state_str = state.to_54_string()
-                                print(f"State String: {state_str}")
-                                solution_moves = solve_cube(state_str)
-                                print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
-                                
-                                try:
-                                    koc_str = state.to_kociemba_string()
-                                    print(f"State String (Kociemba): {koc_str}")
-                                    from solver_utils import solve_cube_kociemba
-                                    global solution_kociemba
-                                    solution_kociemba = solve_cube_kociemba(koc_str)
-                                    print(f"Solution (Kociemba): {solution_kociemba}")
-                                except Exception as e:
-                                    solution_kociemba = f"Kociemba Error: {e}"
+                                is_valid, validation_errors = state.validate_solvability()
+                                if not is_valid:
+                                    validation_error = " ".join(validation_errors)
+                                    solution_moves = f"Invalid cube state: {validation_error}"
+                                    print("Cube state is invalid. Solving was blocked:")
+                                    for error in validation_errors:
+                                        print(f" - {error}")
+                                else:
+                                    print("All faces captured and validated! Solving...")
+                                    state_str = state.to_54_string()
+                                    print(f"State String: {state_str}")
+                                    solution_moves = solve_cube(state_str)
+                                    print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
+
+                                    try:
+                                        koc_str = state.to_kociemba_string()
+                                        print(f"State String (Kociemba): {koc_str}")
+                                        from solver_utils import solve_cube_kociemba
+                                        global solution_kociemba
+                                        solution_kociemba = solve_cube_kociemba(koc_str)
+                                        print(f"Solution (Kociemba): {solution_kociemba}")
+                                    except Exception as e:
+                                        solution_kociemba = f"Kociemba Error: {e}"
                     
                     # Keep the sliding window moving
                     if len(history) > 0:
@@ -245,7 +254,10 @@ def run_camera(skip_calibration=False):
                 else:
                     cv2.putText(annotated_frame, sol_str, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             else:
-                cv2.putText(annotated_frame, "Std Solving Failed", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                status = validation_error or "Std Solving Failed"
+                cv2.putText(annotated_frame, status[:70], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
+                if len(status) > 70:
+                    cv2.putText(annotated_frame, status[70:140], (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
                 
             if 'solution_kociemba' in globals() and globals()['solution_kociemba']:
                 koc_str = "Koc: " + str(globals()['solution_kociemba'])
