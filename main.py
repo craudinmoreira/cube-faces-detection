@@ -4,6 +4,7 @@ import time
 import numpy as np
 from vision import CubeDetector
 from cube_state import CubeState
+from calibration import CalibrationTracker
 from stability import FaceStabilityTracker
 from ui import FaceDisplay
 from solver_utils import solve_cube
@@ -41,8 +42,10 @@ def calibrate_colors(cap, detector):
     print("\n--- Color Calibration Mode ---")
     print("Please show a SOLVED face of the cube to the camera.")
     
-    roi_history = []
-    CALIBRATION_FRAMES = 2
+    calibration_tracker = CalibrationTracker(
+        min_frames=30,
+        min_duration_seconds=1.0,
+    )
     
     while current_idx < len(colors_to_calibrate):
         color_code, color_name = colors_to_calibrate[current_idx]
@@ -54,11 +57,21 @@ def calibrate_colors(cap, detector):
         annotated_frame, face_colors, bgr_rois = detector.process_frame(frame, calibration_mode=True)
         
         if bgr_rois and len(bgr_rois) == 9 and all(r is not None for r in bgr_rois):
-            roi_history.append(bgr_rois)
+            lab_samples = np.array(
+                [
+                    np.median(
+                        cv2.cvtColor(roi, cv2.COLOR_BGR2LAB).reshape(-1, 3),
+                        axis=0,
+                    )
+                    for roi in bgr_rois
+                ]
+            )
+            calibrated_center = calibration_tracker.observe(lab_samples)
         else:
-            roi_history.clear()
+            calibration_tracker.reset()
+            calibrated_center = None
             
-        progress = int((len(roi_history) / CALIBRATION_FRAMES) * 100)
+        progress = int(calibration_tracker.progress() * 100)
         instructions = f"Show SOLVED {color_name} face. Auto-capturing: {progress}%"
         cv2.putText(annotated_frame, instructions, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         cv2.putText(annotated_frame, "Press 'q' to skip calibration.", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
@@ -67,23 +80,11 @@ def calibrate_colors(cap, detector):
         
         key = cv2.waitKey(1) & 0xFF
         
-        if len(roi_history) >= CALIBRATION_FRAMES:
-            all_lab_pixels = []
-            for history_rois in roi_history:
-                for roi in history_rois:
-                    if roi is not None and roi.size > 0:
-                        lab_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
-                        pixels = lab_roi.reshape(-1, 3)
-                        all_lab_pixels.append(pixels)
-            
-            if all_lab_pixels:
-                all_lab_pixels = np.vstack(all_lab_pixels)
-                median_lab = np.median(all_lab_pixels, axis=0)
-                calibrated_centers_lab[color_code] = [float(x) for x in median_lab]
-                print(f"[{color_name}] Calibrated LAB Center: {median_lab}")
-                
+        if calibrated_center is not None:
+            calibrated_centers_lab[color_code] = [float(x) for x in calibrated_center]
+            print(f"[{color_name}] Calibrated LAB Center: {calibrated_center}")
             current_idx += 1
-            roi_history.clear() # Reset for next color
+            calibration_tracker.reset()
             time.sleep(1.0) # Pause so user can switch face
                 
         elif key in [ord('q'), ord('Q')]:

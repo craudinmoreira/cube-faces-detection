@@ -108,3 +108,13 @@ suficiente da segunda cor mais próxima.
 
 Cor cuja melhor e segunda melhor referência estão muito próximas. Ela é
 representada por `U` e impede a captura estável da face.
+
+### Amostra de calibração
+
+Conjunto das nove medianas LAB observadas em uma face resolvida durante a
+calibração.
+
+### Centro de cor calibrado
+
+Mediana robusta de pelo menos 30 amostras de calibração obtidas ao longo de no
+mínimo um segundo para uma cor do cubo.
