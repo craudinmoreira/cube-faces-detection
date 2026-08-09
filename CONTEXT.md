@@ -166,3 +166,21 @@ o centro para classificar e preserva as demais medidas para avaliação futura.
 Arquivo `calibration.json` no formato antigo, que contém somente os centros
 LAB. Ele continua utilizável, mas o programa avisa que não há métricas de
 variabilidade e sugere recalibração.
+
+### Modo de coleta de dados
+
+Modo opcional acionado por `--collect-data`. Ele salva automaticamente somente
+observações estáveis da execução normal, incluindo frame original, face
+retificada, previsão e metadados; fora desse modo, nenhuma imagem é gravada.
+
+### Sessão de coleta
+
+Conjunto delimitado de exemplos do modo de coleta. A primeira política aceita
+até dez faces estáveis por cor (sessenta no total) e descarta observações quase
+idênticas, para privilegiar variedade de iluminação e ângulo.
+
+### Amostra com rótulo conhecido
+
+Observação de uma face fisicamente resolvida, aceita para coleta apenas quando
+as nove leituras concordam com a cor central. A cor esperada de todos os nove
+adesivos é então conhecida sem anotação manual.

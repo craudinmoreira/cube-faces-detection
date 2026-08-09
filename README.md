@@ -92,6 +92,9 @@ Se houver ajuste automático, a janela principal informa sua quantidade e o
 terminal lista as posições alteradas. Com `--debug`, esse resultado também fica
 disponível para diagnóstico.
 
+Consulte o [guia de uso](GUIA_DE_USO.md) para instalar, calibrar, capturar,
+recapturar, depurar e coletar imagens de avaliação.
+
 ## ⚙️ Calibração de Cores
 
 A iluminação do ambiente (lâmpadas brancas, amarelas, luz natural) afeta drasticamente a leitura das cores pela câmera. Se o sistema estiver confundindo Laranja com Vermelho, ou Branco com Amarelo, você precisará calibrar os centros LAB.

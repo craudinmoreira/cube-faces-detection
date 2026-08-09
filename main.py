@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from vision import CubeDetector, parse_calibration_data
 from cube_state import CubeState
 from calibration import CalibrationTracker
+from data_collection import DataCollectionSession
 from stability import FaceStabilityTracker
 from ui import FaceDisplay
 from solver_utils import solve_cube
@@ -180,7 +181,7 @@ def draw_capture_legend(frame, pending_face):
             2,
         )
 
-def run_camera(skip_calibration=False, debug=False):
+def run_camera(skip_calibration=False, debug=False, collect_data=False):
     cap = cv2.VideoCapture(0)
     detector = CubeDetector(debug=debug)
     state = CubeState()
@@ -216,6 +217,10 @@ def run_camera(skip_calibration=False, debug=False):
     validation_error = None
     correction_report = None
     pending_recapture_face = None
+    collection_session = DataCollectionSession() if collect_data else None
+    collection_status = None
+    if collection_session:
+        print(f"Collecting solved-face samples in {collection_session.directory}")
 
     while True:
         ret, frame = cap.read()
@@ -252,6 +257,15 @@ def run_camera(skip_calibration=False, debug=False):
 
                 if consensus_colors:
                     face_name = state.center_to_face[consensus_colors[4]]
+                    if collection_session:
+                        saved, collection_status = collection_session.observe(
+                            face_name,
+                            consensus_colors,
+                            frame,
+                            detector.debug_views.get('Face retificada'),
+                            metadata={'grid_score': detector.debug_state.get('grid_score')},
+                        )
+                        print(collection_status)
                     can_capture = (
                         face_name not in state.faces
                         or face_name == pending_recapture_face
@@ -322,6 +336,31 @@ def run_camera(skip_calibration=False, debug=False):
         # Display UI
         ui_img = ui.draw(state)
         draw_capture_legend(annotated_frame, pending_recapture_face)
+        if collection_session:
+            progress = collection_session.progress()
+            progress_text = ' '.join(
+                f'{color}:{progress.get(color, 0)}/{collection_session.max_samples_per_color}'
+                for color in ('W', 'Y', 'G', 'B', 'R', 'O')
+            )
+            cv2.putText(
+                annotated_frame,
+                f'Coleta: {progress_text}',
+                (10, 290),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                (255, 255, 0),
+                1,
+            )
+            if collection_status:
+                cv2.putText(
+                    annotated_frame,
+                    collection_status[:90],
+                    (10, 310),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45,
+                    (255, 255, 0),
+                    1,
+                )
         if correction_report and correction_report['changes']:
             cv2.putText(
                 annotated_frame,
@@ -429,9 +468,18 @@ if __name__ == "__main__":
     parser.add_argument("--image", type=str, help="Path to an image to process (optional)")
     parser.add_argument("--skip-calibration", action="store_true", help="Skip color calibration and use default ranges")
     parser.add_argument("--debug", action="store_true", help="Show geometry and rectification diagnostics")
+    parser.add_argument(
+        "--collect-data",
+        action="store_true",
+        help="Save deduplicated stable observations of solved faces for evaluation",
+    )
     args = parser.parse_args()
     
     if args.image:
         run_image(args.image, debug=args.debug)
     else:
-        run_camera(skip_calibration=args.skip_calibration, debug=args.debug)
+        run_camera(
+            skip_calibration=args.skip_calibration,
+            debug=args.debug,
+            collect_data=args.collect_data,
+        )
