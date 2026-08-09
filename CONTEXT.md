@@ -55,3 +55,30 @@ válido. O solver não pode ser chamado até que o usuário recapture uma face.
 
 Estado com nove adesivos de cada cor, seis centros coerentes e uma configuração
 de cantos e arestas que pode existir em um cubo físico.
+
+### Candidato geométrico
+
+Quadrilátero detectado no frame que pode representar uma peça, mas ainda não
+foi aceito como parte de uma face do cubo.
+
+### Grade candidata
+
+Conjunto ordenado de nove candidatos geométricos que pode representar uma face
+3×3.
+
+### Pontuação de grade
+
+Medida de coerência espacial de uma grade candidata. Ela considera a formação
+de três linhas e três colunas, espaçamento e tamanho consistentes. Somente a
+melhor grade acima do limiar é aceita.
+
+### Frame geométrico rejeitado
+
+Frame no qual nenhum conjunto de candidatos forma uma grade com confiança
+suficiente. Nenhuma cor é classificada nesse frame.
+
+### Grade frontal
+
+Grade candidata observada com linhas e colunas aproximadamente paralelas aos
+eixos da imagem. A primeira etapa geométrica aceita apenas grades frontais;
+perspectiva forte é tratada posteriormente por retificação.

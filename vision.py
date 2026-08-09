@@ -63,6 +63,8 @@ class ColorDetector:
         return detected_color
 
 class CubeDetector:
+    GRID_SCORE_THRESHOLD = 0.78
+
     def __init__(self):
         self.color_detector = ColorDetector()
 
@@ -102,27 +104,84 @@ class CubeDetector:
                 unique.append(item)
         return unique
 
-    def _group_and_sort_squares(self, square_contours):
+    @staticmethod
+    def _candidate_center(candidate):
+        x, y, width, height = candidate[2]
+        return np.array([x + width / 2, y + height / 2], dtype=float)
+
+    def _score_grid(self, group, seed_center):
+        """Score an ordered, near-frontal 3x3 candidate grid from 0 to 1."""
+        ordered_by_y = sorted(group, key=lambda item: self._candidate_center(item)[1])
+        rows = [
+            sorted(ordered_by_y[index:index + 3], key=lambda item: self._candidate_center(item)[0])
+            for index in range(0, 9, 3)
+        ]
+        centers = np.array(
+            [[self._candidate_center(candidate) for candidate in row] for row in rows]
+        )
+        areas = np.array([candidate[1] for row in rows for candidate in row], dtype=float)
+        widths = np.array([candidate[2][2] for row in rows for candidate in row], dtype=float)
+        heights = np.array([candidate[2][3] for row in rows for candidate in row], dtype=float)
+        tile_width = np.median(widths)
+        tile_height = np.median(heights)
+
+        row_alignment_error = np.mean(np.std(centers[:, :, 1], axis=1)) / tile_height
+        column_alignment_error = np.mean(np.std(centers[:, :, 0], axis=0)) / tile_width
+        row_alignment = np.exp(-4 * row_alignment_error)
+        column_alignment = np.exp(-4 * column_alignment_error)
+
+        row_means = np.mean(centers[:, :, 1], axis=1)
+        column_means = np.mean(centers[:, :, 0], axis=0)
+        vertical_gaps = np.diff(row_means)
+        horizontal_gaps = np.diff(column_means)
+        if min(vertical_gaps) <= tile_height * 0.75 or min(horizontal_gaps) <= tile_width * 0.75:
+            return 0.0, None
+
+        vertical_regular = min(vertical_gaps) / max(vertical_gaps)
+        horizontal_regular = min(horizontal_gaps) / max(horizontal_gaps)
+        spacing_score = (vertical_regular + horizontal_regular) / 2
+        area_score = min(areas) / max(areas)
+
+        grid_center = centers[1, 1]
+        seed_distance = np.linalg.norm(seed_center - grid_center)
+        center_score = np.exp(-seed_distance / max(tile_width, tile_height))
+        score = (
+            0.25 * row_alignment
+            + 0.25 * column_alignment
+            + 0.20 * spacing_score
+            + 0.15 * area_score
+            + 0.15 * center_score
+        )
+        return float(score), [candidate for row in rows for candidate in row]
+
+    def _select_best_grid(self, square_contours):
         if len(square_contours) < 9:
+            return None, 0.0
+
+        candidate_centers = [self._candidate_center(candidate) for candidate in square_contours]
+        best_group = None
+        best_score = 0.0
+        for seed_index, seed_center in enumerate(candidate_centers):
+            distances = [
+                (np.linalg.norm(center - seed_center), index)
+                for index, center in enumerate(candidate_centers)
+            ]
+            nearest_indexes = [index for _, index in sorted(distances)[:9]]
+            group = [square_contours[index] for index in nearest_indexes]
+            score, ordered_group = self._score_grid(group, seed_center)
+            if ordered_group is not None and score > best_score:
+                best_group = ordered_group
+                best_score = score
+
+        return best_group, best_score
+
+    def _group_and_sort_squares(self, square_contours):
+        best_group, best_score = self._select_best_grid(square_contours)
+        if best_group is None or best_score < self.GRID_SCORE_THRESHOLD:
             return None
-            
-        square_contours.sort(key=lambda x: x[1], reverse=True)
-        
-        found_group = None
-        for i in range(len(square_contours) - 8):
-            group = square_contours[i:i+9]
-            max_area = group[0][1]
-            min_area = group[-1][1]
-            
-            if min_area > max_area * 0.5:
-                found_group = group
-                break
-        
-        if not found_group:
-            return None
-            
+
         centers = []
-        for approx, area, bbox in found_group:
+        for approx, area, bbox in best_group:
             x, y, w, h = bbox
             centers.append({
                 'approx': approx,
@@ -131,25 +190,7 @@ class CubeDetector:
                 'cy': y + h//2
             })
             
-        centers.sort(key=lambda item: item['cy'])
-
-        avg_tile_h = int(np.median([c['bbox'][3] for c in centers]))
-        row_tolerance = max(10, avg_tile_h // 2)
-
-        rows = []
-        current_row = [centers[0]]
-        for c in centers[1:]:
-            if abs(c['cy'] - current_row[-1]['cy']) < row_tolerance:
-                current_row.append(c)
-            else:
-                rows.append(sorted(current_row, key=lambda i: i['cx']))
-                current_row = [c]
-        rows.append(sorted(current_row, key=lambda i: i['cx']))
-
-        if len(rows) != 3 or any(len(r) != 3 for r in rows):
-            return None
-
-        return [item for row in rows for item in row]
+        return centers
 
     def _extract_colors_and_draw(self, frame, annotated_frame, sorted_faces, calibration_mode):
         color_smooth = cv2.GaussianBlur(frame, (11, 11), 0)
