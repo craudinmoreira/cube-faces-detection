@@ -124,3 +124,33 @@ calibração.
 
 Mediana robusta de pelo menos 30 amostras de calibração obtidas ao longo de no
 mínimo um segundo para uma cor do cubo.
+
+### Restrição global de cores
+
+Regra aplicada às seis faces completas que exige exatamente nove adesivos de
+cada cor, preservando os seis centros canônicos.
+
+### Correção global automática
+
+Substituição das cores não centrais pela atribuição global de menor custo. Ela
+só é aplicada quando é a única solução e o estado resultante passa na validação
+física; caso contrário, as leituras originais são preservadas e o programa
+solicita recaptura.
+
+### Adesivo não central corrigível
+
+Qualquer uma das 48 posições que não contém um centro. Ela pode receber outra
+cor pela correção global automática, desde que sejam atendidas as regras de
+unicidade, custo mínimo e validade física.
+
+### Face suspeita
+
+Face cuja soma dos custos de classificação é alta quando a correção global não
+consegue encontrar um estado físico válido. A interface a destaca como sugestão
+de recaptura, mas não altera nem descarta nenhuma face automaticamente.
+
+### Relatório de correção global
+
+Resumo exibido quando uma correção automática é aceita. Informa quantos
+adesivos não centrais mudaram e suas posições; no modo `--debug`, também fica
+disponível para diagnóstico detalhado.

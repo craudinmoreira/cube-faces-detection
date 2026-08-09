@@ -80,11 +80,25 @@ Além da janela principal, o modo abre janelas com os quadriláteros candidatos
 e a face retificada. A janela principal mostra a quantidade de candidatos, a
 pontuação da grade 3×3 e, quando aplicável, o motivo da rejeição.
 
+### Validação e correção global
+
+Depois de capturar as seis faces, o programa equilibra automaticamente as
+cores para haver nove adesivos de cada uma, mantendo os seis centros fixos.
+Ele só aceita uma correção se a melhor alternativa for única e descrever um
+cubo fisicamente possível. Quando isso não ocorrer, as leituras são preservadas
+e as faces mais suspeitas são indicadas para recaptura pelas teclas da legenda.
+
+Se houver ajuste automático, a janela principal informa sua quantidade e o
+terminal lista as posições alteradas. Com `--debug`, esse resultado também fica
+disponível para diagnóstico.
+
 ## ⚙️ Calibração de Cores
 
-A iluminação do ambiente (lâmpadas brancas, amarelas, luz natural) afeta drasticamente a leitura das cores pela câmera. Se o sistema estiver confundindo Laranja com Vermelho, ou Branco com Amarelo, você precisará calibrar os limiares.
+A iluminação do ambiente (lâmpadas brancas, amarelas, luz natural) afeta drasticamente a leitura das cores pela câmera. Se o sistema estiver confundindo Laranja com Vermelho, ou Branco com Amarelo, você precisará calibrar os centros LAB.
 
-Para ajustar, abra o arquivo `vision.py` e localize o dicionário `self.color_ranges` dentro da classe `ColorDetector`. Altere os limites inferiores e superiores (Hue, Saturation, Value) até que o sistema fique estável no seu ambiente.
+No menu inicial, escolha a opção 1 e mostre uma face resolvida de cada cor. O
+programa coleta pelo menos 30 observações durante um segundo e grava a mediana
+em `calibration.json`.
 
 ---
 Desenvolvido com Python, OpenCV e a biblioteca [rubik-cube](https://pypi.org/project/rubik-cube/).

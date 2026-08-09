@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, deque
 from itertools import product
 
 
@@ -59,6 +59,8 @@ class CubeState:
     def __init__(self):
         # Maps face standard name (U, D, F, B, L, R) to a list of 9 color strings
         self.faces = {}
+        # Per-sticker LAB distances collected during a stable camera observation.
+        self.face_color_costs = {}
         
         # Default western color scheme
         self.center_to_face = {
@@ -70,7 +72,7 @@ class CubeState:
             'O': 'L'
         }
         
-    def add_face(self, colors):
+    def add_face(self, colors, color_costs=None):
         """
         Takes a list of 9 colors representing a face.
         The center color (index 4) determines which face it is.
@@ -83,8 +85,150 @@ class CubeState:
             return False
             
         face_name = self.center_to_face[center_color]
-        self.faces[face_name] = colors
+        self.faces[face_name] = list(colors)
+        if color_costs is not None and len(color_costs) == 9:
+            self.face_color_costs[face_name] = color_costs
+        else:
+            self.face_color_costs.pop(face_name, None)
         return face_name
+
+    def apply_global_color_correction(self):
+        """Apply the unique, minimum-cost 9-per-color assignment when legal.
+
+        Centers are fixed. The original capture is never mutated unless the
+        assignment is unique and the resulting cube passes physical validation.
+        """
+        if not self.is_complete():
+            return False, None, ["A correção global exige as seis faces capturadas."]
+        colors = tuple(self.center_to_face)
+        if any(
+            face not in self.face_color_costs
+            or len(self.face_color_costs[face]) != 9
+            for face in self.FACE_ORDER
+        ):
+            return False, None, ["Dados de confiança das cores estão ausentes; recapture as faces."]
+
+        stickers = []
+        for face_name in self.FACE_ORDER:
+            for position, costs in enumerate(self.face_color_costs[face_name]):
+                if position == 4:
+                    continue
+                if not all(color in costs for color in colors):
+                    return False, None, ["Dados de confiança das cores estão incompletos; recapture as faces."]
+                stickers.append((face_name, position, costs))
+
+        assignment, best_cost = self._minimum_cost_assignment(stickers, colors)
+        if assignment is None:
+            return False, None, ["Não foi possível equilibrar nove adesivos por cor."]
+        if not self._assignment_is_unique(stickers, colors, assignment, best_cost):
+            return False, None, ["A correção global é ambígua; recapture as faces sugeridas."]
+
+        candidate_faces = {face: list(values) for face, values in self.faces.items()}
+        changes = []
+        for (face_name, position, _), color in zip(stickers, assignment):
+            previous = candidate_faces[face_name][position]
+            candidate_faces[face_name][position] = color
+            if previous != color:
+                changes.append((face_name, position, previous, color))
+
+        candidate = CubeState()
+        candidate.faces = candidate_faces
+        is_valid, errors = candidate.validate_solvability()
+        if not is_valid:
+            suspect_faces = self._suspect_faces(stickers)
+            return False, None, errors + [
+                "Faces mais suspeitas para recaptura: " + ", ".join(suspect_faces) + "."
+            ]
+
+        self.faces = candidate_faces
+        return True, {"changes": changes, "cost": best_cost}, []
+
+    def _minimum_cost_assignment(self, stickers, colors, forbidden=None):
+        """Assign eight non-center stickers to each color with min-cost flow."""
+        forbidden = forbidden or set()
+        source = 0
+        sticker_offset = 1
+        color_offset = sticker_offset + len(stickers)
+        sink = color_offset + len(colors)
+        graph = [[] for _ in range(sink + 1)]
+
+        def add_edge(start, end, capacity, cost):
+            graph[start].append([end, len(graph[end]), capacity, cost])
+            graph[end].append([start, len(graph[start]) - 1, 0, -cost])
+
+        for sticker_index, (_, _, costs) in enumerate(stickers):
+            sticker_node = sticker_offset + sticker_index
+            add_edge(source, sticker_node, 1, 0)
+            for color_index, color in enumerate(colors):
+                if (sticker_index, color) not in forbidden:
+                    add_edge(sticker_node, color_offset + color_index, 1, int(round(costs[color] * 1000)))
+        for color_index in range(len(colors)):
+            add_edge(color_offset + color_index, sink, 8, 0)
+
+        total_cost = 0
+        for _ in stickers:
+            previous_node = [-1] * len(graph)
+            previous_edge = [-1] * len(graph)
+            distance = [None] * len(graph)
+            distance[source] = 0
+            queue = deque([source])
+            in_queue = [False] * len(graph)
+            in_queue[source] = True
+            while queue:
+                node = queue.popleft()
+                in_queue[node] = False
+                for edge_index, edge in enumerate(graph[node]):
+                    end, _, capacity, cost = edge
+                    if capacity <= 0:
+                        continue
+                    candidate_cost = distance[node] + cost
+                    if distance[end] is None or candidate_cost < distance[end]:
+                        distance[end] = candidate_cost
+                        previous_node[end] = node
+                        previous_edge[end] = edge_index
+                        if not in_queue[end]:
+                            queue.append(end)
+                            in_queue[end] = True
+            if distance[sink] is None:
+                return None, None
+            total_cost += distance[sink]
+            node = sink
+            while node != source:
+                start = previous_node[node]
+                edge = graph[start][previous_edge[node]]
+                edge[2] -= 1
+                graph[node][edge[1]][2] += 1
+                node = start
+
+        assignment = []
+        for sticker_index in range(len(stickers)):
+            sticker_node = sticker_offset + sticker_index
+            selected_color = next(
+                (
+                    colors[edge[0] - color_offset]
+                    for edge in graph[sticker_node]
+                    if color_offset <= edge[0] < sink and edge[2] == 0
+                ),
+                None,
+            )
+            assignment.append(selected_color)
+        return assignment, total_cost
+
+    def _assignment_is_unique(self, stickers, colors, assignment, best_cost):
+        for sticker_index, color in enumerate(assignment):
+            _, alternative_cost = self._minimum_cost_assignment(
+                stickers, colors, forbidden={(sticker_index, color)}
+            )
+            if alternative_cost == best_cost:
+                return False
+        return True
+
+    def _suspect_faces(self, stickers):
+        totals = Counter()
+        for face_name, position, costs in stickers:
+            observed = self.faces[face_name][position]
+            totals[face_name] += costs.get(observed, min(costs.values()))
+        return [face for face, _ in totals.most_common(2)]
 
     def is_complete(self):
         return len(self.faces) == 6

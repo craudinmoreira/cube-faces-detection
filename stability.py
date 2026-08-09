@@ -1,6 +1,8 @@
 from collections import Counter, deque
 import time
 
+import numpy as np
+
 
 class FaceStabilityTracker:
     """Accept a face only after its 3x3 colors remain stable over time."""
@@ -52,7 +54,7 @@ class FaceStabilityTracker:
             duration_progress = min(1.0, elapsed / self.min_duration_seconds)
         return min(frames_progress, duration_progress)
 
-    def observe(self, colors, timestamp=None):
+    def observe(self, colors, timestamp=None, color_costs=None):
         """
         Record one 3x3 observation and return stable colors when ready.
 
@@ -68,7 +70,9 @@ class FaceStabilityTracker:
             self.reset()
 
         observed_at = time.monotonic() if timestamp is None else timestamp
-        self._history.append((observed_at, observed_colors))
+        if color_costs is not None and len(color_costs) != 9:
+            raise ValueError("color_costs must contain one entry per sticker")
+        self._history.append((observed_at, observed_colors, color_costs))
         self._discard_expired_observations(observed_at)
 
         if len(self._history) < self.min_frames:
@@ -79,13 +83,26 @@ class FaceStabilityTracker:
         consensus = []
         total_observations = len(self._history)
         for sticker_index in range(9):
-            votes = Counter(frame[sticker_index] for _, frame in self._history)
+            votes = Counter(frame[sticker_index] for _, frame, _ in self._history)
             color, count = votes.most_common(1)[0]
             if color == 'U' or count / total_observations < self.min_agreement:
                 return None
             consensus.append(color)
 
         return consensus
+
+    def consensus_color_costs(self):
+        """Return median per-color costs from the stable observation window."""
+        if not self._history or any(costs is None for _, _, costs in self._history):
+            return None
+        colors = self._history[0][2][0].keys()
+        return [
+            {
+                color: float(np.median([costs[index][color] for _, _, costs in self._history]))
+                for color in colors
+            }
+            for index in range(9)
+        ]
 
     def _discard_expired_observations(self, observed_at):
         while (

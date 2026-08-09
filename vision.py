@@ -40,36 +40,43 @@ class ColorDetector:
         }
 
     def detect_color(self, bgr_roi):
+        color, _ = self.detect_color_with_distances(bgr_roi)
+        return color
+
+    def detect_color_with_distances(self, bgr_roi):
+        """Return the conservative label together with costs for all colors."""
         if bgr_roi.size == 0:
-            return 'U'
-            
+            return 'U', {color: float('inf') for color in self.color_centers_lab}
+
         lab_roi = cv2.cvtColor(bgr_roi, cv2.COLOR_BGR2LAB)
-        
         # Use median to ignore noise/glare
         pixels = lab_roi.reshape(-1, 3)
         median_lab = np.median(pixels, axis=0)
 
-        return self.classify_lab(median_lab)
+        distances = self.color_distances_lab(median_lab)
+        return self.classify_distances(distances), distances
 
-    def classify_lab(self, lab_color):
-        """Classify a LAB value only when its nearest reference is decisive."""
+    def color_distances_lab(self, lab_color):
+        """Return weighted LAB distances to each calibrated color center."""
         weights = np.array([0.5, 1.0, 1.0])
-        distances = sorted(
-            (
-                (np.linalg.norm((np.asarray(lab_color) - center) * weights), color)
-                for color, center in self.color_centers_lab.items()
-            ),
-            key=lambda item: item[0],
-        )
-        best_distance, best_color = distances[0]
-        second_distance, _ = distances[1]
+        return {
+            color: float(np.linalg.norm((np.asarray(lab_color) - center) * weights))
+            for color, center in self.color_centers_lab.items()
+        }
 
+    def classify_distances(self, distances):
+        ordered = sorted((distance, color) for color, distance in distances.items())
+        best_distance, best_color = ordered[0]
+        second_distance, _ = ordered[1]
         if best_distance > self.MAX_COLOR_DISTANCE:
             return 'U'
         if second_distance - best_distance < self.MIN_COLOR_MARGIN:
             return 'U'
-
         return best_color
+
+    def classify_lab(self, lab_color):
+        """Classify a LAB value only when its nearest reference is decisive."""
+        return self.classify_distances(self.color_distances_lab(lab_color))
 
 class CubeDetector:
     GRID_SCORE_THRESHOLD = 0.78
@@ -86,6 +93,7 @@ class CubeDetector:
         self.debug = debug
         self.debug_state = {}
         self.debug_views = {}
+        self.last_color_costs = None
 
     def _find_squares(self, frame):
         blurred = cv2.GaussianBlur(frame, (5, 5), 0)
@@ -275,6 +283,7 @@ class CubeDetector:
             return None, None
 
         face_colors = []
+        color_costs = []
         rois = []
         roi_offset = (self.RECTIFIED_CELL_SIZE - self.RECTIFIED_ROI_SIZE) // 2
 
@@ -293,8 +302,9 @@ class CubeDetector:
             cy = int(round(face_data['cy']))
             
             if not calibration_mode:
-                detected_color = self.color_detector.detect_color(roi)
+                detected_color, distances = self.color_detector.detect_color_with_distances(roi)
                 face_colors.append(detected_color)
+                color_costs.append(distances)
                 
                 bgr_color = self.color_detector.color_bgr.get(detected_color, (255,255,255))
                 cv2.drawContours(annotated_frame, [approx], -1, bgr_color, 3)
@@ -306,6 +316,7 @@ class CubeDetector:
                 cv2.drawContours(annotated_frame, [approx], -1, (255, 255, 255), 3)
                 cv2.circle(annotated_frame, (cx, cy), 5, (255, 255, 255), -1)
                 
+        self.last_color_costs = color_costs if not calibration_mode else None
         return face_colors, rois
 
     def _enhance_image(self, frame):
@@ -338,6 +349,7 @@ class CubeDetector:
         annotated_frame = enhanced_frame.copy()
         self.debug_state = {}
         self.debug_views = {}
+        self.last_color_costs = None
         
         square_contours = self._find_squares(frame)
         self.debug_state['candidate_count'] = len(square_contours)

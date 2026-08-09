@@ -34,6 +34,15 @@ class ColorDetectorConfidenceTests(unittest.TestCase):
 
         self.assertEqual('R', self.detector.detect_color(roi))
 
+    def test_color_measurement_exposes_cost_for_every_reference(self):
+        label, distances = self.detector.detect_color_with_distances(
+            np.full((20, 20, 3), (0, 0, 255), dtype=np.uint8)
+        )
+
+        self.assertEqual('R', label)
+        self.assertEqual(set(self.detector.color_centers_lab), set(distances))
+        self.assertLess(distances['R'], distances['O'])
+
 
 if __name__ == '__main__':
     unittest.main()

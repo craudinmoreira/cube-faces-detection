@@ -94,6 +94,17 @@ class FaceStabilityTrackerTests(unittest.TestCase):
 
         self.assertEqual(0.5, tracker.progress(timestamp=0.5))
 
+    def test_returns_median_color_costs_for_a_stable_observation(self):
+        tracker = FaceStabilityTracker(min_frames=2, min_duration_seconds=0)
+        first = [{'R': 1.0, 'O': 9.0} for _ in range(9)]
+        second = [{'R': 3.0, 'O': 7.0} for _ in range(9)]
+
+        tracker.observe(FACE, timestamp=0.0, color_costs=first)
+        self.assertEqual(FACE, tracker.observe(FACE, timestamp=0.1, color_costs=second))
+
+        self.assertEqual(2.0, tracker.consensus_color_costs()[0]['R'])
+        self.assertEqual(8.0, tracker.consensus_color_costs()[0]['O'])
+
 
 if __name__ == '__main__':
     unittest.main()

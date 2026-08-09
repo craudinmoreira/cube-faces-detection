@@ -203,6 +203,7 @@ def run_camera(skip_calibration=False, debug=False):
     
     solution_moves = None
     validation_error = None
+    correction_report = None
     pending_recapture_face = None
 
     while True:
@@ -223,7 +224,10 @@ def run_camera(skip_calibration=False, debug=False):
         if face_colors:
             center_color = face_colors[4]
             if center_color != 'U' and center_color in state.center_to_face:
-                consensus_colors = stability_tracker.observe(face_colors)
+                consensus_colors = stability_tracker.observe(
+                    face_colors,
+                    color_costs=detector.last_color_costs,
+                )
                 progress = int(stability_tracker.progress() * 100)
                 cv2.putText(
                     annotated_frame,
@@ -243,40 +247,60 @@ def run_camera(skip_calibration=False, debug=False):
                     )
                     if can_capture:
                         print(f"Captured {face_name} face!")
-                        state.add_face(consensus_colors)
+                        state.add_face(
+                            consensus_colors,
+                            stability_tracker.consensus_color_costs(),
+                        )
                         stability_tracker.reset()
 
                         if face_name == pending_recapture_face:
                             pending_recapture_face = None
                             solution_moves = None
                             validation_error = None
+                            correction_report = None
                             globals().pop('solution_kociemba', None)
 
                         if state.is_complete() and not solution_moves:
-                            orientations_resolved, orientation_errors, rotations = state.resolve_orientations()
-                            if not orientations_resolved:
-                                validation_error = " ".join(orientation_errors)
+                            corrected, correction_report, correction_errors = (
+                                state.apply_global_color_correction()
+                            )
+                            if not corrected:
+                                validation_error = " ".join(correction_errors)
                                 solution_moves = f"Invalid cube state: {validation_error}"
-                                print("Cube orientation is unresolved. Solving was blocked:")
-                                for error in orientation_errors:
+                                print("Global color correction was blocked:")
+                                for error in correction_errors:
                                     print(f" - {error}")
                             else:
-                                print(f"Resolved face rotations: {rotations}")
-                                print("All faces captured and validated! Solving...")
-                                state_str = state.to_54_string()
-                                print(f"State String: {state_str}")
-                                solution_moves = solve_cube(state_str)
-                                print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
+                                changes = correction_report['changes']
+                                if changes:
+                                    locations = ", ".join(
+                                        f"{face}{position + 1}" for face, position, _, _ in changes
+                                    )
+                                    print(f"Global color correction adjusted {len(changes)} sticker(s): {locations}")
+                                orientations_resolved, orientation_errors, rotations = state.resolve_orientations()
+                                if not orientations_resolved:
+                                    validation_error = " ".join(orientation_errors)
+                                    solution_moves = f"Invalid cube state: {validation_error}"
+                                    print("Cube orientation is unresolved. Solving was blocked:")
+                                    for error in orientation_errors:
+                                        print(f" - {error}")
+                                else:
+                                    print(f"Resolved face rotations: {rotations}")
+                                    print("All faces captured and validated! Solving...")
+                                    state_str = state.to_54_string()
+                                    print(f"State String: {state_str}")
+                                    solution_moves = solve_cube(state_str)
+                                    print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
 
-                                try:
-                                    koc_str = state.to_kociemba_string()
-                                    print(f"State String (Kociemba): {koc_str}")
-                                    from solver_utils import solve_cube_kociemba
-                                    global solution_kociemba
-                                    solution_kociemba = solve_cube_kociemba(koc_str)
-                                    print(f"Solution (Kociemba): {solution_kociemba}")
-                                except Exception as e:
-                                    solution_kociemba = f"Kociemba Error: {e}"
+                                    try:
+                                        koc_str = state.to_kociemba_string()
+                                        print(f"State String (Kociemba): {koc_str}")
+                                        from solver_utils import solve_cube_kociemba
+                                        global solution_kociemba
+                                        solution_kociemba = solve_cube_kociemba(koc_str)
+                                        print(f"Solution (Kociemba): {solution_kociemba}")
+                                    except Exception as e:
+                                        solution_kociemba = f"Kociemba Error: {e}"
                     else:
                         stability_tracker.reset()
             else:
@@ -287,6 +311,30 @@ def run_camera(skip_calibration=False, debug=False):
         # Display UI
         ui_img = ui.draw(state)
         draw_capture_legend(annotated_frame, pending_recapture_face)
+        if correction_report and correction_report['changes']:
+            cv2.putText(
+                annotated_frame,
+                f"Correcao global: {len(correction_report['changes'])} adesivo(s) ajustado(s)",
+                (10, 250),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                1,
+            )
+            if debug:
+                locations = ", ".join(
+                    f"{face}{position + 1} {before}>{after}"
+                    for face, position, before, after in correction_report['changes']
+                )
+                cv2.putText(
+                    annotated_frame,
+                    locations[:90],
+                    (10, 270),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45,
+                    (0, 255, 0),
+                    1,
+                )
         
         # Display instructions or status on camera feed
         if state.is_complete():

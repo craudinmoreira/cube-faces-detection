@@ -20,6 +20,17 @@ def solved_state():
     return state
 
 
+def costs_for_faces(faces):
+    colors = ('W', 'Y', 'G', 'B', 'R', 'O')
+    return {
+        face: [
+            {color: 0.0 if color == observed else 100.0 for color in colors}
+            for observed in values
+        ]
+        for face, values in faces.items()
+    }
+
+
 def state_from_flat_string(flat):
     state = CubeState()
     state.faces = {
@@ -158,6 +169,49 @@ class CubeStateOrientationTests(unittest.TestCase):
         self.assertTrue(errors)
         self.assertIsNone(rotations)
         self.assertEqual(original_faces, state.faces)
+
+
+class CubeStateGlobalCorrectionTests(unittest.TestCase):
+    def test_corrects_non_center_labels_to_a_unique_legal_cube(self):
+        state = solved_state()
+        state.faces['U'][0], state.faces['R'][0] = 'R', 'W'
+        state.face_color_costs = costs_for_faces(SOLVED_FACES)
+
+        corrected, report, errors = state.apply_global_color_correction()
+
+        self.assertTrue(corrected)
+        self.assertEqual([], errors)
+        self.assertEqual(2, len(report['changes']))
+        self.assertEqual(SOLVED_FACES, state.faces)
+
+    def test_does_not_mutate_when_minimum_cost_cube_is_physically_invalid(self):
+        state = solved_state()
+        state.faces['U'][7], state.faces['F'][1] = 'G', 'W'
+        state.face_color_costs = costs_for_faces(state.faces)
+        original_faces = copy.deepcopy(state.faces)
+
+        corrected, report, errors = state.apply_global_color_correction()
+
+        self.assertFalse(corrected)
+        self.assertIsNone(report)
+        self.assertEqual(original_faces, state.faces)
+        self.assertTrue(any('Faces mais suspeitas' in error for error in errors))
+
+    def test_does_not_mutate_when_assignment_is_ambiguous(self):
+        state = solved_state()
+        colors = tuple(state.center_to_face)
+        state.face_color_costs = {
+            face: [{color: 1.0 for color in colors} for _ in range(9)]
+            for face in state.FACE_ORDER
+        }
+        original_faces = copy.deepcopy(state.faces)
+
+        corrected, report, errors = state.apply_global_color_correction()
+
+        self.assertFalse(corrected)
+        self.assertIsNone(report)
+        self.assertEqual(original_faces, state.faces)
+        self.assertTrue(any('ambígua' in error for error in errors))
 
 
 if __name__ == '__main__':
