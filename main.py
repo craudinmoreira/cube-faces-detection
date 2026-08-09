@@ -4,6 +4,7 @@ import time
 import numpy as np
 from vision import CubeDetector
 from cube_state import CubeState
+from stability import FaceStabilityTracker
 from ui import FaceDisplay
 from solver_utils import solve_cube
 
@@ -153,10 +154,11 @@ def run_camera(skip_calibration=False):
         else:
             print("Using default hardcoded color ranges.")
     
-    # Stability tracking (Consensus Voting)
-    from collections import Counter
-    history = []
-    STABILITY_FRAMES = 1 # Gather 15 frames for consensus
+    stability_tracker = FaceStabilityTracker(
+        min_frames=15,
+        min_duration_seconds=0.5,
+        min_agreement=0.8,
+    )
     
     print("Hold the SCRAMBLED cube to the camera. Face capturing is automatic.")
     print("Press 'q' to quit at any time.")
@@ -173,72 +175,56 @@ def run_camera(skip_calibration=False):
         
         if face_colors:
             center_color = face_colors[4]
-            # Only accumulate if we have a valid known center
             if center_color != 'U' and center_color in state.center_to_face:
-                # If the center color changes, reset the history
-                if history and history[0][4] != center_color:
-                    history.clear()
-                
-                history.append(face_colors)
-                
-                # Provide visual feedback on capture progress
-                progress = int((len(history) / STABILITY_FRAMES) * 100)
-                cv2.putText(annotated_frame, f"Scanning {state.center_to_face[center_color]}... {progress}%", 
-                            (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-                
-                if len(history) >= STABILITY_FRAMES:
-                    # Compute consensus for each of the 9 squares
-                    consensus_colors = []
-                    for i in range(9):
-                        square_colors = [f[i] for f in history]
-                        valid_colors = [c for c in square_colors if c != 'U']
-                        
-                        if not valid_colors:
-                            consensus_colors.append('U')
-                        else:
-                            most_common = Counter(valid_colors).most_common(1)[0][0]
-                            consensus_colors.append(most_common)
-                            
-                    # If consensus is complete and clean
-                    if 'U' not in consensus_colors:
-                        face_name = state.center_to_face[consensus_colors[4]]
-                        if face_name not in state.faces:
-                            print(f"Captured {face_name} face!")
-                            state.add_face(consensus_colors)
-                            history.clear() # Reset history after capture
-                            
-                            if state.is_complete() and not solution_moves:
-                                is_valid, validation_errors = state.validate_solvability()
-                                if not is_valid:
-                                    validation_error = " ".join(validation_errors)
-                                    solution_moves = f"Invalid cube state: {validation_error}"
-                                    print("Cube state is invalid. Solving was blocked:")
-                                    for error in validation_errors:
-                                        print(f" - {error}")
-                                else:
-                                    print("All faces captured and validated! Solving...")
-                                    state_str = state.to_54_string()
-                                    print(f"State String: {state_str}")
-                                    solution_moves = solve_cube(state_str)
-                                    print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
+                consensus_colors = stability_tracker.observe(face_colors)
+                progress = int(stability_tracker.progress() * 100)
+                cv2.putText(
+                    annotated_frame,
+                    f"Scanning {state.center_to_face[center_color]}... {progress}%",
+                    (10, 90),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (255, 255, 0),
+                    2,
+                )
 
-                                    try:
-                                        koc_str = state.to_kociemba_string()
-                                        print(f"State String (Kociemba): {koc_str}")
-                                        from solver_utils import solve_cube_kociemba
-                                        global solution_kociemba
-                                        solution_kociemba = solve_cube_kociemba(koc_str)
-                                        print(f"Solution (Kociemba): {solution_kociemba}")
-                                    except Exception as e:
-                                        solution_kociemba = f"Kociemba Error: {e}"
-                    
-                    # Keep the sliding window moving
-                    if len(history) > 0:
-                        history.pop(0)
+                if consensus_colors:
+                    face_name = state.center_to_face[consensus_colors[4]]
+                    if face_name not in state.faces:
+                        print(f"Captured {face_name} face!")
+                        state.add_face(consensus_colors)
+                        stability_tracker.reset()
+
+                        if state.is_complete() and not solution_moves:
+                            is_valid, validation_errors = state.validate_solvability()
+                            if not is_valid:
+                                validation_error = " ".join(validation_errors)
+                                solution_moves = f"Invalid cube state: {validation_error}"
+                                print("Cube state is invalid. Solving was blocked:")
+                                for error in validation_errors:
+                                    print(f" - {error}")
+                            else:
+                                print("All faces captured and validated! Solving...")
+                                state_str = state.to_54_string()
+                                print(f"State String: {state_str}")
+                                solution_moves = solve_cube(state_str)
+                                print(f"Solution: {' '.join(solution_moves) if isinstance(solution_moves, list) else solution_moves}")
+
+                                try:
+                                    koc_str = state.to_kociemba_string()
+                                    print(f"State String (Kociemba): {koc_str}")
+                                    from solver_utils import solve_cube_kociemba
+                                    global solution_kociemba
+                                    solution_kociemba = solve_cube_kociemba(koc_str)
+                                    print(f"Solution (Kociemba): {solution_kociemba}")
+                                except Exception as e:
+                                    solution_kociemba = f"Kociemba Error: {e}"
+                    else:
+                        stability_tracker.reset()
             else:
-                history.clear()
+                stability_tracker.reset()
         else:
-            history.clear()
+            stability_tracker.reset()
 
         # Display UI
         ui_img = ui.draw(state)
