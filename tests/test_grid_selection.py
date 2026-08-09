@@ -68,6 +68,23 @@ class GridSelectionTests(unittest.TestCase):
             [(item['cx'], item['cy']) for item in selected[:5]],
         )
 
+    def test_suppresses_overlapping_candidates_by_iou(self):
+        large = candidate(100, 100, size=40)
+        overlapping = candidate(102, 102, size=36)
+        distinct = candidate(200, 100, size=40)
+
+        selected = self.detector._suppress_overlaps([overlapping, distinct, large])
+
+        self.assertEqual(2, len(selected))
+        self.assertEqual({large[2], distinct[2]}, {item[2] for item in selected})
+
+    def test_area_screening_scales_with_frame_size(self):
+        frame_area = 1000 * 1000
+
+        self.assertTrue(self.detector._has_plausible_area(2_500, frame_area))
+        self.assertFalse(self.detector._has_plausible_area(100, frame_area))
+        self.assertFalse(self.detector._has_plausible_area(100_000, frame_area))
+
 
 if __name__ == '__main__':
     unittest.main()

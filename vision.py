@@ -73,6 +73,9 @@ class ColorDetector:
 
 class CubeDetector:
     GRID_SCORE_THRESHOLD = 0.78
+    MIN_SQUARE_AREA_RATIO = 0.0005
+    MAX_SQUARE_AREA_RATIO = 0.08
+    OVERLAP_IOU_THRESHOLD = 0.5
     RECTIFIED_FACE_SIZE = 300
     RECTIFIED_CELL_SIZE = RECTIFIED_FACE_SIZE // 3
     RECTIFIED_ROI_SIZE = 50
@@ -90,6 +93,7 @@ class CubeDetector:
         
         contours, _ = cv2.findContours(dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         
+        frame_area = frame.shape[0] * frame.shape[1]
         square_contours = []
         for contour in contours:
             perimeter = cv2.arcLength(contour, True)
@@ -97,25 +101,38 @@ class CubeDetector:
             
             if len(approx) == 4 and cv2.isContourConvex(approx):
                 area = cv2.contourArea(contour)
-                if 500 < area < 25000:
+                if self._has_plausible_area(area, frame_area):
                     x, y, w, h = cv2.boundingRect(approx)
                     aspect_ratio = float(w) / h
                     if 0.75 <= aspect_ratio <= 1.3:
                         square_contours.append((approx, area, (x, y, w, h)))
-        return self._deduplicate(square_contours)
+        return self._suppress_overlaps(square_contours)
 
-    def _deduplicate(self, square_contours, min_dist=20):
-        unique = []
-        for item in square_contours:
-            x, y, w, h = item[2]
-            cx, cy = x + w // 2, y + h // 2
-            if not any(
-                abs(cx - (u[2][0] + u[2][2] // 2)) < min_dist and
-                abs(cy - (u[2][1] + u[2][3] // 2)) < min_dist
-                for u in unique
+    def _has_plausible_area(self, area, frame_area):
+        ratio = area / frame_area
+        return self.MIN_SQUARE_AREA_RATIO < ratio < self.MAX_SQUARE_AREA_RATIO
+
+    @staticmethod
+    def _bbox_iou(first_bbox, second_bbox):
+        first_x, first_y, first_w, first_h = first_bbox
+        second_x, second_y, second_w, second_h = second_bbox
+        left = max(first_x, second_x)
+        top = max(first_y, second_y)
+        right = min(first_x + first_w, second_x + second_w)
+        bottom = min(first_y + first_h, second_y + second_h)
+        intersection = max(0, right - left) * max(0, bottom - top)
+        union = first_w * first_h + second_w * second_h - intersection
+        return intersection / union if union else 0.0
+
+    def _suppress_overlaps(self, square_contours):
+        selected = []
+        for candidate in sorted(square_contours, key=lambda item: item[1], reverse=True):
+            if all(
+                self._bbox_iou(candidate[2], existing[2]) < self.OVERLAP_IOU_THRESHOLD
+                for existing in selected
             ):
-                unique.append(item)
-        return unique
+                selected.append(candidate)
+        return selected
 
     @staticmethod
     def _candidate_center(candidate):

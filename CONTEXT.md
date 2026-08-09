@@ -83,6 +83,12 @@ Grade candidata observada com linhas e colunas aproximadamente paralelas aos
 eixos da imagem. A primeira etapa geométrica aceita apenas grades frontais;
 perspectiva forte é tratada posteriormente por retificação.
 
+### Supressão de sobreposição
+
+Processo que mantém um único candidato geométrico quando múltiplos contornos
+se sobrepõem à mesma peça. A decisão usa a razão entre a interseção e a união
+das caixas delimitadoras, não uma distância fixa em pixels.
+
 ### Homografia da face
 
 Transformação que usa os centros das nove peças de uma grade candidata para
