@@ -4,6 +4,9 @@ import json
 import os
 
 class ColorDetector:
+    MAX_COLOR_DISTANCE = 80
+    MIN_COLOR_MARGIN = 10
+
     def __init__(self, calibration_path='calibration.json'):
         # Define LAB color centers for the Rubik's cube standard colors.
         # L: 0-255, a: 0-255, b: 0-255 (OpenCV's representation of LAB)
@@ -45,22 +48,28 @@ class ColorDetector:
         # Use median to ignore noise/glare
         pixels = lab_roi.reshape(-1, 3)
         median_lab = np.median(pixels, axis=0)
-        
-        min_dist = float('inf')
-        detected_color = 'U'
+
+        return self.classify_lab(median_lab)
+
+    def classify_lab(self, lab_color):
+        """Classify a LAB value only when its nearest reference is decisive."""
         weights = np.array([0.5, 1.0, 1.0])
-        
-        for color, center in self.color_centers_lab.items():
-            dist = np.linalg.norm((median_lab - center) * weights)
-            if dist < min_dist:
-                min_dist = dist
-                detected_color = color
-                
-        # Optional: threshold to prevent completely random colors from matching
-        if min_dist > 80:
+        distances = sorted(
+            (
+                (np.linalg.norm((np.asarray(lab_color) - center) * weights), color)
+                for color, center in self.color_centers_lab.items()
+            ),
+            key=lambda item: item[0],
+        )
+        best_distance, best_color = distances[0]
+        second_distance, _ = distances[1]
+
+        if best_distance > self.MAX_COLOR_DISTANCE:
             return 'U'
-            
-        return detected_color
+        if second_distance - best_distance < self.MIN_COLOR_MARGIN:
+            return 'U'
+
+        return best_color
 
 class CubeDetector:
     GRID_SCORE_THRESHOLD = 0.78

@@ -97,3 +97,14 @@ internas, fixas e de mesmo tamanho nessa imagem, não nos retângulos originais.
 
 Frame cuja homografia é geometricamente inconsistente. Ele não usa as regiões
 originais como alternativa e aguarda uma nova observação.
+
+### Decisão de cor
+
+Resultado da comparação entre a cor observada de uma ROI e os seis centros de
+cor calibrados. Uma decisão aceita exige proximidade suficiente e separação
+suficiente da segunda cor mais próxima.
+
+### Cor ambígua
+
+Cor cuja melhor e segunda melhor referência estão muito próximas. Ela é
+representada por `U` e impede a captura estável da face.
