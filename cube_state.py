@@ -1,4 +1,5 @@
 from collections import Counter
+from itertools import product
 
 
 class CubeState:
@@ -253,6 +254,57 @@ class CubeState:
                 errors.append("A paridade das permutações de cantos e arestas não coincide.")
 
         return not errors, errors
+
+    @staticmethod
+    def rotate_face_clockwise(colors):
+        """Return a 3x3 face rotated clockwise by 90 degrees."""
+        if len(colors) != 9:
+            raise ValueError("A face must contain exactly 9 colors.")
+        return [colors[6], colors[3], colors[0], colors[7], colors[4], colors[1], colors[8], colors[5], colors[2]]
+
+    @classmethod
+    def _rotate_face(cls, colors, quarter_turns):
+        rotated = list(colors)
+        for _ in range(quarter_turns % 4):
+            rotated = cls.rotate_face_clockwise(rotated)
+        return rotated
+
+    def resolve_orientations(self):
+        """
+        Rotate captured faces until exactly one legal cube state is found.
+
+        Faces with rotationally identical layouts can produce several equivalent
+        rotation vectors, so candidates are deduplicated by their 54 facelets.
+        The state is updated only after an unambiguous result is found.
+        """
+        counts_valid, errors = self.validate_counts()
+        if not counts_valid:
+            return False, errors, None
+
+        valid_states = {}
+        for rotations in product(range(4), repeat=len(self.FACE_ORDER)):
+            candidate = CubeState()
+            candidate.faces = {
+                face_name: self._rotate_face(self.faces[face_name], turns)
+                for face_name, turns in zip(self.FACE_ORDER, rotations)
+            }
+            is_valid, _ = candidate.validate_solvability()
+            if is_valid:
+                state_string = candidate.to_kociemba_string()
+                valid_states.setdefault(state_string, (candidate.faces, rotations))
+
+        if not valid_states:
+            return False, ["Nenhuma orientação das faces forma um cubo válido."], None
+        if len(valid_states) > 1:
+            return (
+                False,
+                ["Mais de uma orientação válida foi encontrada; recapture uma face."],
+                None,
+            )
+
+        resolved_faces, rotations = next(iter(valid_states.values()))
+        self.faces = {face_name: list(colors) for face_name, colors in resolved_faces.items()}
+        return True, [], dict(zip(self.FACE_ORDER, rotations))
         
     def get_missing_faces(self):
         all_faces = set(self.center_to_face.values())

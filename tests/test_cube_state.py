@@ -128,5 +128,37 @@ class CubeStateSolvabilityTests(unittest.TestCase):
         self.assertTrue(any('paridade' in error for error in errors))
 
 
+class CubeStateOrientationTests(unittest.TestCase):
+    def test_resolves_rotated_legal_faces(self):
+        flat = 'RRYRWYBBOWWOWOGWGRGBBWOGWGWBRRGBOBBGWRYOOBYYYRYGYYGOOR'
+        state = state_from_flat_string(flat)
+        expected = state.to_kociemba_string()
+
+        state.faces['U'] = state._rotate_face(state.faces['U'], 1)
+        state.faces['R'] = state._rotate_face(state.faces['R'], 2)
+        state.faces['F'] = state._rotate_face(state.faces['F'], 3)
+        state.faces['D'] = state._rotate_face(state.faces['D'], 1)
+        state.faces['L'] = state._rotate_face(state.faces['L'], 2)
+
+        resolved, errors, rotations = state.resolve_orientations()
+
+        self.assertTrue(resolved)
+        self.assertEqual([], errors)
+        self.assertIsNotNone(rotations)
+        self.assertEqual(expected, state.to_kociemba_string())
+
+    def test_solving_orientation_does_not_mutate_an_invalid_state(self):
+        state = solved_state()
+        state.faces['U'][0] = 'R'
+        original_faces = copy.deepcopy(state.faces)
+
+        resolved, errors, rotations = state.resolve_orientations()
+
+        self.assertFalse(resolved)
+        self.assertTrue(errors)
+        self.assertIsNone(rotations)
+        self.assertEqual(original_faces, state.faces)
+
+
 if __name__ == '__main__':
     unittest.main()

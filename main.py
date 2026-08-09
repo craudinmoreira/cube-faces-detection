@@ -8,6 +8,20 @@ from stability import FaceStabilityTracker
 from ui import FaceDisplay
 from solver_utils import solve_cube
 
+
+CAPTURE_KEY_TO_FACE = {
+    ord('u'): 'U',
+    ord('r'): 'R',
+    ord('f'): 'F',
+    ord('d'): 'D',
+    ord('l'): 'L',
+    ord('b'): 'B',
+}
+CAPTURE_LEGEND = (
+    "Recapturar: U branco/topo | R vermelho/direita | F verde/frente",
+    "D amarelo/baixo | L laranja/esquerda | B azul/tras | Esc cancela",
+)
+
 def calibrate_colors(cap, detector):
     """
     Guides the user to calibrate the 6 colors using a solved cube.
@@ -117,7 +131,6 @@ def load_calibration_from_log(detector):
     if not os.path.exists(log_file):
         print(f"No {log_file} found. Using default colors.")
         return False
-        
     try:
         with open(log_file, "r") as f:
             calibrated_centers = json.load(f)
@@ -130,6 +143,30 @@ def load_calibration_from_log(detector):
     except Exception as e:
         print(f"Could not parse calibration data: {e}. Using defaults.")
         return False
+
+
+def draw_capture_legend(frame, pending_face):
+    color = (0, 255, 255) if pending_face else (210, 210, 210)
+    for index, line in enumerate(CAPTURE_LEGEND):
+        cv2.putText(
+            frame,
+            line,
+            (10, 150 + index * 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            color,
+            1,
+        )
+    if pending_face:
+        cv2.putText(
+            frame,
+            f"Recaptura pendente: {pending_face}",
+            (10, 130),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 255),
+            2,
+        )
 
 def run_camera(skip_calibration=False):
     cap = cv2.VideoCapture(0)
@@ -165,6 +202,7 @@ def run_camera(skip_calibration=False):
     
     solution_moves = None
     validation_error = None
+    pending_recapture_face = None
 
     while True:
         ret, frame = cap.read()
@@ -190,20 +228,31 @@ def run_camera(skip_calibration=False):
 
                 if consensus_colors:
                     face_name = state.center_to_face[consensus_colors[4]]
-                    if face_name not in state.faces:
+                    can_capture = (
+                        face_name not in state.faces
+                        or face_name == pending_recapture_face
+                    )
+                    if can_capture:
                         print(f"Captured {face_name} face!")
                         state.add_face(consensus_colors)
                         stability_tracker.reset()
 
+                        if face_name == pending_recapture_face:
+                            pending_recapture_face = None
+                            solution_moves = None
+                            validation_error = None
+                            globals().pop('solution_kociemba', None)
+
                         if state.is_complete() and not solution_moves:
-                            is_valid, validation_errors = state.validate_solvability()
-                            if not is_valid:
-                                validation_error = " ".join(validation_errors)
+                            orientations_resolved, orientation_errors, rotations = state.resolve_orientations()
+                            if not orientations_resolved:
+                                validation_error = " ".join(orientation_errors)
                                 solution_moves = f"Invalid cube state: {validation_error}"
-                                print("Cube state is invalid. Solving was blocked:")
-                                for error in validation_errors:
+                                print("Cube orientation is unresolved. Solving was blocked:")
+                                for error in orientation_errors:
                                     print(f" - {error}")
                             else:
+                                print(f"Resolved face rotations: {rotations}")
                                 print("All faces captured and validated! Solving...")
                                 state_str = state.to_54_string()
                                 print(f"State String: {state_str}")
@@ -228,6 +277,7 @@ def run_camera(skip_calibration=False):
 
         # Display UI
         ui_img = ui.draw(state)
+        draw_capture_legend(annotated_frame, pending_recapture_face)
         
         # Display instructions or status on camera feed
         if state.is_complete():
@@ -259,8 +309,17 @@ def run_camera(skip_calibration=False):
         cv2.imshow('Rubik Cube Detection', annotated_frame)
         cv2.imshow('Cube Faces', ui_img)
         
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
             break
+        if key == 27 and pending_recapture_face:
+            pending_recapture_face = None
+            stability_tracker.reset()
+            print("Recapture cancelled.")
+        elif key in CAPTURE_KEY_TO_FACE:
+            pending_recapture_face = CAPTURE_KEY_TO_FACE[key]
+            stability_tracker.reset()
+            print(f"Recapturing {pending_recapture_face}; previous face is preserved until replacement.")
 
     cap.release()
     cv2.destroyAllWindows()
