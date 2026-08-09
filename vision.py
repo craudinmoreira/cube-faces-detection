@@ -64,6 +64,10 @@ class ColorDetector:
 
 class CubeDetector:
     GRID_SCORE_THRESHOLD = 0.78
+    RECTIFIED_FACE_SIZE = 300
+    RECTIFIED_CELL_SIZE = RECTIFIED_FACE_SIZE // 3
+    RECTIFIED_ROI_SIZE = 50
+    MAX_HOMOGRAPHY_ERROR = 4.0
 
     def __init__(self):
         self.color_detector = ColorDetector()
@@ -192,26 +196,62 @@ class CubeDetector:
             
         return centers
 
+    def _rectify_face(self, frame, sorted_faces):
+        """Warp a detected 3x3 face to a square, front-facing image."""
+        if len(sorted_faces) != 9:
+            return None
+
+        source_points = np.float32(
+            [[face['cx'], face['cy']] for face in sorted_faces]
+        )
+        target_points = np.float32(
+            [
+                [
+                    column * self.RECTIFIED_CELL_SIZE + self.RECTIFIED_CELL_SIZE / 2,
+                    row * self.RECTIFIED_CELL_SIZE + self.RECTIFIED_CELL_SIZE / 2,
+                ]
+                for row in range(3)
+                for column in range(3)
+            ]
+        )
+        homography, inliers = cv2.findHomography(source_points, target_points, cv2.RANSAC, 3.0)
+        if homography is None or inliers is None or int(inliers.sum()) != 9:
+            return None
+
+        projected_points = cv2.perspectiveTransform(source_points.reshape(-1, 1, 2), homography)
+        errors = np.linalg.norm(projected_points.reshape(-1, 2) - target_points, axis=1)
+        if float(np.max(errors)) > self.MAX_HOMOGRAPHY_ERROR:
+            return None
+
+        return cv2.warpPerspective(
+            frame,
+            homography,
+            (self.RECTIFIED_FACE_SIZE, self.RECTIFIED_FACE_SIZE),
+        )
+
     def _extract_colors_and_draw(self, frame, annotated_frame, sorted_faces, calibration_mode):
         color_smooth = cv2.GaussianBlur(frame, (11, 11), 0)
+        rectified_face = self._rectify_face(color_smooth, sorted_faces)
+        if rectified_face is None:
+            return None, None
+
         face_colors = []
         rois = []
-        
-        for face_data in sorted_faces:
+        roi_offset = (self.RECTIFIED_CELL_SIZE - self.RECTIFIED_ROI_SIZE) // 2
+
+        for index, face_data in enumerate(sorted_faces):
             approx = face_data['approx']
             x, y, w, h = face_data['bbox']
-            
-            offset_x = int(w * 0.3)
-            offset_y = int(h * 0.3)
-            roi = color_smooth[y+offset_y:y+h-offset_y, x+offset_x:x+w-offset_x]
-            
-            if roi.size == 0:
-                face_colors.append('U')
-                rois.append(None)
-                continue
-                
+            row, column = divmod(index, 3)
+            roi_x = column * self.RECTIFIED_CELL_SIZE + roi_offset
+            roi_y = row * self.RECTIFIED_CELL_SIZE + roi_offset
+            roi = rectified_face[
+                roi_y:roi_y + self.RECTIFIED_ROI_SIZE,
+                roi_x:roi_x + self.RECTIFIED_ROI_SIZE,
+            ]
             rois.append(roi)
-            cx, cy = face_data['cx'], face_data['cy']
+            cx = int(round(face_data['cx']))
+            cy = int(round(face_data['cy']))
             
             if not calibration_mode:
                 detected_color = self.color_detector.detect_color(roi)
@@ -265,6 +305,7 @@ class CubeDetector:
             face_colors, rois = self._extract_colors_and_draw(
                 enhanced_frame, annotated_frame, sorted_faces, calibration_mode
             )
-            return annotated_frame, face_colors, rois
+            if face_colors is not None:
+                return annotated_frame, face_colors, rois
 
         return annotated_frame, None, None

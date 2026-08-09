@@ -82,3 +82,18 @@ suficiente. Nenhuma cor é classificada nesse frame.
 Grade candidata observada com linhas e colunas aproximadamente paralelas aos
 eixos da imagem. A primeira etapa geométrica aceita apenas grades frontais;
 perspectiva forte é tratada posteriormente por retificação.
+
+### Homografia da face
+
+Transformação que usa os centros das nove peças de uma grade candidata para
+converter a face observada em uma visão quadrada e frontal.
+
+### Face retificada
+
+Imagem canônica produzida pela homografia. As cores são medidas em nove regiões
+internas, fixas e de mesmo tamanho nessa imagem, não nos retângulos originais.
+
+### Frame de retificação rejeitado
+
+Frame cuja homografia é geometricamente inconsistente. Ele não usa as regiões
+originais como alternativa e aguarda uma nova observação.
