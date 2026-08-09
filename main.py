@@ -169,9 +169,9 @@ def draw_capture_legend(frame, pending_face):
             2,
         )
 
-def run_camera(skip_calibration=False):
+def run_camera(skip_calibration=False, debug=False):
     cap = cv2.VideoCapture(0)
-    detector = CubeDetector()
+    detector = CubeDetector(debug=debug)
     state = CubeState()
     ui = FaceDisplay()
     
@@ -211,6 +211,14 @@ def run_camera(skip_calibration=False):
             break
             
         annotated_frame, face_colors, _ = detector.process_frame(frame, calibration_mode=False)
+        if debug:
+            debug_state = detector.get_debug_state()
+            cv2.putText(annotated_frame, f"Candidates: {debug_state.get('candidate_count', 0)} | Grid: {debug_state.get('grid_score', 0):.2f}", (10, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+            rejection_reason = debug_state.get('rejection_reason')
+            if rejection_reason:
+                cv2.putText(annotated_frame, rejection_reason, (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
+            for title, image in detector.debug_views.items():
+                cv2.imshow(f'Debug: {title}', image)
         
         if face_colors:
             center_color = face_colors[4]
@@ -325,14 +333,14 @@ def run_camera(skip_calibration=False):
     cap.release()
     cv2.destroyAllWindows()
 
-def run_image(image_path):
+def run_image(image_path, debug=False):
     print(f"Processing image: {image_path}")
     frame = cv2.imread(image_path)
     if frame is None:
         print("Error: Could not read image.")
         return
         
-    detector = CubeDetector()
+    detector = CubeDetector(debug=debug)
     state = CubeState()
     ui = FaceDisplay()
     
@@ -350,6 +358,9 @@ def run_image(image_path):
     
     cv2.imshow('Rubik Cube Detection', annotated_frame)
     cv2.imshow('Cube Faces', ui_img)
+    if debug:
+        for title, image in detector.debug_views.items():
+            cv2.imshow(f'Debug: {title}', image)
     print("Press any key to exit.")
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -358,9 +369,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Rubik's Cube Solver with OpenCV")
     parser.add_argument("--image", type=str, help="Path to an image to process (optional)")
     parser.add_argument("--skip-calibration", action="store_true", help="Skip color calibration and use default ranges")
+    parser.add_argument("--debug", action="store_true", help="Show geometry and rectification diagnostics")
     args = parser.parse_args()
     
     if args.image:
-        run_image(args.image)
+        run_image(args.image, debug=args.debug)
     else:
-        run_camera(skip_calibration=args.skip_calibration)
+        run_camera(skip_calibration=args.skip_calibration, debug=args.debug)

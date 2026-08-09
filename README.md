@@ -67,6 +67,19 @@ Para processar uma **imagem estática**:
 python main.py --image caminho_para_sua_foto.png
 ```
 
+### Diagnóstico visual
+
+Use `--debug` para investigar por que um frame foi aceito ou rejeitado:
+
+```bash
+python main.py --debug
+python main.py --image caminho_para_sua_foto.png --debug
+```
+
+Além da janela principal, o modo abre janelas com os quadriláteros candidatos
+e a face retificada. A janela principal mostra a quantidade de candidatos, a
+pontuação da grade 3×3 e, quando aplicável, o motivo da rejeição.
+
 ## ⚙️ Calibração de Cores
 
 A iluminação do ambiente (lâmpadas brancas, amarelas, luz natural) afeta drasticamente a leitura das cores pela câmera. Se o sistema estiver confundindo Laranja com Vermelho, ou Branco com Amarelo, você precisará calibrar os limiares.

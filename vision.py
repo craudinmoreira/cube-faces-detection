@@ -81,8 +81,11 @@ class CubeDetector:
     RECTIFIED_ROI_SIZE = 50
     MAX_HOMOGRAPHY_ERROR = 4.0
 
-    def __init__(self):
+    def __init__(self, debug=False):
         self.color_detector = ColorDetector()
+        self.debug = debug
+        self.debug_state = {}
+        self.debug_views = {}
 
     def _find_squares(self, frame):
         blurred = cv2.GaussianBlur(frame, (5, 5), 0)
@@ -207,7 +210,9 @@ class CubeDetector:
 
     def _group_and_sort_squares(self, square_contours):
         best_group, best_score = self._select_best_grid(square_contours)
+        self.debug_state['grid_score'] = best_score
         if best_group is None or best_score < self.GRID_SCORE_THRESHOLD:
+            self.debug_state['rejection_reason'] = 'Nenhuma grade 3x3 confiavel.'
             return None
 
         centers = []
@@ -225,6 +230,7 @@ class CubeDetector:
     def _rectify_face(self, frame, sorted_faces):
         """Warp a detected 3x3 face to a square, front-facing image."""
         if len(sorted_faces) != 9:
+            self.debug_state['rejection_reason'] = 'A grade nao possui nove pecas.'
             return None
 
         source_points = np.float32(
@@ -242,18 +248,25 @@ class CubeDetector:
         )
         homography, inliers = cv2.findHomography(source_points, target_points, cv2.RANSAC, 3.0)
         if homography is None or inliers is None or int(inliers.sum()) != 9:
+            self.debug_state['rejection_reason'] = 'Homografia sem nove correspondencias.'
             return None
 
         projected_points = cv2.perspectiveTransform(source_points.reshape(-1, 1, 2), homography)
         errors = np.linalg.norm(projected_points.reshape(-1, 2) - target_points, axis=1)
         if float(np.max(errors)) > self.MAX_HOMOGRAPHY_ERROR:
+            self.debug_state['rejection_reason'] = 'Erro de homografia acima do limite.'
             return None
 
-        return cv2.warpPerspective(
+        rectified = cv2.warpPerspective(
             frame,
             homography,
             (self.RECTIFIED_FACE_SIZE, self.RECTIFIED_FACE_SIZE),
         )
+        self.debug_views['Face retificada'] = rectified
+        return rectified
+
+    def get_debug_state(self):
+        return dict(self.debug_state)
 
     def _extract_colors_and_draw(self, frame, annotated_frame, sorted_faces, calibration_mode):
         color_smooth = cv2.GaussianBlur(frame, (11, 11), 0)
@@ -323,8 +336,17 @@ class CubeDetector:
         # Boost saturation before any processing happens
         enhanced_frame = self._enhance_image(frame)
         annotated_frame = enhanced_frame.copy()
+        self.debug_state = {}
+        self.debug_views = {}
         
         square_contours = self._find_squares(frame)
+        self.debug_state['candidate_count'] = len(square_contours)
+        if self.debug:
+            candidates_view = annotated_frame.copy()
+            for approx, _, _ in square_contours:
+                cv2.drawContours(candidates_view, [approx], -1, (0, 255, 255), 2)
+            self.debug_views['Candidatos'] = candidates_view
+
         sorted_faces = self._group_and_sort_squares(square_contours)
         
         if sorted_faces:
@@ -332,6 +354,7 @@ class CubeDetector:
                 enhanced_frame, annotated_frame, sorted_faces, calibration_mode
             )
             if face_colors is not None:
+                self.debug_state['rejection_reason'] = None
                 return annotated_frame, face_colors, rois
 
         return annotated_frame, None, None
