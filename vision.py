@@ -2,6 +2,40 @@ import cv2
 import numpy as np
 import json
 import os
+import warnings
+
+
+def parse_calibration_data(data):
+    """Return LAB centers and whether a valid file uses the legacy schema."""
+    if not isinstance(data, dict):
+        raise ValueError("a calibração deve ser um objeto JSON")
+
+    if data.get('schema_version') == 2:
+        profiles = data.get('colors')
+        if not isinstance(profiles, dict):
+            raise ValueError("o perfil de calibração não contém cores")
+        values = {
+            color: profile.get('center_lab') if isinstance(profile, dict) else None
+            for color, profile in profiles.items()
+        }
+        legacy = False
+    else:
+        values = data
+        legacy = True
+
+    centers = {}
+    for color, value in values.items():
+        if not isinstance(value, list) or len(value) != 3:
+            raise ValueError(f"centro LAB inválido para a cor {color!r}")
+        try:
+            centers[color] = np.asarray(value, dtype=float)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"centro LAB inválido para a cor {color!r}") from error
+        if not np.all(np.isfinite(centers[color])):
+            raise ValueError(f"centro LAB inválido para a cor {color!r}")
+    if not centers:
+        raise ValueError("a calibração não contém centros LAB")
+    return centers, legacy
 
 class ColorDetector:
     MAX_COLOR_DISTANCE = 80
@@ -23,10 +57,19 @@ class ColorDetector:
             try:
                 with open(calibration_path) as f:
                     data = json.load(f)
-                for color, values in data.items():
-                    self.color_centers_lab[color] = np.array(values)
-            except Exception:
-                pass
+                centers, legacy = parse_calibration_data(data)
+                self.color_centers_lab.update(centers)
+                if legacy:
+                    warnings.warn(
+                        "Calibração legada carregada sem métricas de variabilidade; "
+                        "recalibre para atualizar o perfil.",
+                        UserWarning,
+                    )
+            except (OSError, json.JSONDecodeError, ValueError) as error:
+                warnings.warn(
+                    f"Não foi possível carregar a calibração; usando centros padrão: {error}",
+                    UserWarning,
+                )
         
         # Used for drawing UI
         self.color_bgr = {

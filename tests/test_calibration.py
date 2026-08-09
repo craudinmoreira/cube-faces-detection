@@ -39,6 +39,19 @@ class CalibrationTrackerTests(unittest.TestCase):
 
         self.assertEqual(0.5, tracker.progress(timestamp=0.5))
 
+    def test_profile_records_variability_and_distance_percentiles(self):
+        tracker = CalibrationTracker(min_frames=2, min_duration_seconds=0)
+        tracker.observe(SAMPLE, timestamp=2.0)
+        tracker.observe(SAMPLE + 4, timestamp=3.5)
+
+        profile = tracker.profile()
+
+        self.assertEqual([102.0, 152.0, 202.0], profile['center_lab'])
+        self.assertEqual(18, profile['sample_count'])
+        self.assertEqual(1.5, profile['duration_seconds'])
+        self.assertGreater(profile['channel_std_lab'][0], 0)
+        self.assertIn('p95', profile['distance_percentiles'])
+
 
 if __name__ == '__main__':
     unittest.main()

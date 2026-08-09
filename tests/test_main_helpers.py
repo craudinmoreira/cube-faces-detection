@@ -31,6 +31,20 @@ class MainHelperTests(unittest.TestCase):
             np.array([1.0, 2.0, 3.0]), detector.color_detector.color_centers_lab['R']
         )
 
+    def test_loads_versioned_calibration_profile(self):
+        detector = FakeDetector()
+        calibration = '{"schema_version": 2, "colors": {"R": {"center_lab": [1, 2, 3]}}}'
+
+        with patch('main.os.path.exists', return_value=True), patch(
+            'builtins.open', mock_open(read_data=calibration)
+        ):
+            loaded = main.load_calibration_from_log(detector)
+
+        self.assertTrue(loaded)
+        np.testing.assert_array_equal(
+            np.array([1.0, 2.0, 3.0]), detector.color_detector.color_centers_lab['R']
+        )
+
     def test_legend_lists_each_recapture_key(self):
         self.assertEqual(
             {'U', 'R', 'F', 'D', 'L', 'B'}, set(main.CAPTURE_KEY_TO_FACE.values())

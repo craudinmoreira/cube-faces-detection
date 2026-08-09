@@ -1,8 +1,9 @@
 import unittest
+from unittest.mock import mock_open, patch
 
 import numpy as np
 
-from vision import ColorDetector
+from vision import ColorDetector, parse_calibration_data
 
 
 class ColorDetectorConfidenceTests(unittest.TestCase):
@@ -42,6 +43,20 @@ class ColorDetectorConfidenceTests(unittest.TestCase):
         self.assertEqual('R', label)
         self.assertEqual(set(self.detector.color_centers_lab), set(distances))
         self.assertLess(distances['R'], distances['O'])
+
+    def test_parses_versioned_calibration_profile(self):
+        centers, legacy = parse_calibration_data(
+            {'schema_version': 2, 'colors': {'R': {'center_lab': [1, 2, 3]}}}
+        )
+
+        self.assertFalse(legacy)
+        np.testing.assert_array_equal(np.array([1.0, 2.0, 3.0]), centers['R'])
+
+    def test_warns_when_calibration_file_has_invalid_schema(self):
+        with patch('vision.os.path.exists', return_value=True), patch(
+            'builtins.open', mock_open(read_data='{"schema_version": 2, "colors": {}}')
+        ), self.assertWarnsRegex(UserWarning, 'Não foi possível carregar'):
+            ColorDetector(calibration_path='invalid.json')
 
 
 if __name__ == '__main__':

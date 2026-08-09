@@ -98,7 +98,10 @@ A iluminação do ambiente (lâmpadas brancas, amarelas, luz natural) afeta dras
 
 No menu inicial, escolha a opção 1 e mostre uma face resolvida de cada cor. O
 programa coleta pelo menos 30 observações durante um segundo e grava a mediana
-em `calibration.json`.
+em `calibration.json`. O arquivo também registra a variabilidade LAB e os
+percentis de distância observados, junto de data e câmera. Arquivos antigos,
+com apenas os centros LAB, continuam funcionando; o terminal recomenda uma
+recalibração para gerar o perfil completo.
 
 ---
 Desenvolvido com Python, OpenCV e a biblioteca [rubik-cube](https://pypi.org/project/rubik-cube/).

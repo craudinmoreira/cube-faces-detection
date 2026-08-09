@@ -154,3 +154,15 @@ de recaptura, mas não altera nem descarta nenhuma face automaticamente.
 Resumo exibido quando uma correção automática é aceita. Informa quantos
 adesivos não centrais mudaram e suas posições; no modo `--debug`, também fica
 disponível para diagnóstico detalhado.
+
+### Perfil de calibração
+
+Registro versionado de cada cor calibrada: centro LAB robusto, dispersão por
+canal, percentis de distância e metadados de data e câmera. A versão atual usa
+o centro para classificar e preserva as demais medidas para avaliação futura.
+
+### Calibração legada
+
+Arquivo `calibration.json` no formato antigo, que contém somente os centros
+LAB. Ele continua utilizável, mas o programa avisa que não há métricas de
+variabilidade e sugere recalibração.

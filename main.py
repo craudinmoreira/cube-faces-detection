@@ -1,8 +1,10 @@
 import cv2
 import argparse
+import json
 import time
 import numpy as np
-from vision import CubeDetector
+from datetime import datetime, timezone
+from vision import CubeDetector, parse_calibration_data
 from cube_state import CubeState
 from calibration import CalibrationTracker
 from stability import FaceStabilityTracker
@@ -36,7 +38,7 @@ def calibrate_colors(cap, detector):
         ('R', 'Red')
     ]
     
-    calibrated_centers_lab = {}
+    calibrated_profiles = {}
     current_idx = 0
     
     print("\n--- Color Calibration Mode ---")
@@ -81,7 +83,7 @@ def calibrate_colors(cap, detector):
         key = cv2.waitKey(1) & 0xFF
         
         if calibrated_center is not None:
-            calibrated_centers_lab[color_code] = [float(x) for x in calibrated_center]
+            calibrated_profiles[color_code] = calibration_tracker.profile()
             print(f"[{color_name}] Calibrated LAB Center: {calibrated_center}")
             current_idx += 1
             calibration_tracker.reset()
@@ -91,13 +93,21 @@ def calibrate_colors(cap, detector):
             print("Calibration skipped.")
             return False
             
-    import json
     with open("calibration.json", "w") as f:
-        json.dump(calibrated_centers_lab, f, indent=4)
+        json.dump(
+            {
+                "schema_version": 2,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "camera": {"index": 0},
+                "colors": calibrated_profiles,
+            },
+            f,
+            indent=4,
+        )
         
     # Apply calibrated centers
-    for k, v in calibrated_centers_lab.items():
-        detector.color_detector.color_centers_lab[k] = np.array(v)
+    for color, profile in calibrated_profiles.items():
+        detector.color_detector.color_centers_lab[color] = np.array(profile["center_lab"])
         
     print("\nCalibration Complete and saved to calibration.json!")
     print("Scramble your cube. Press 's' to start scanning.")
@@ -122,7 +132,6 @@ def calibrate_colors(cap, detector):
     return True
 
 import os
-import json
 
 def load_calibration_from_log(detector):
     """
@@ -136,12 +145,14 @@ def load_calibration_from_log(detector):
         with open(log_file, "r") as f:
             calibrated_centers = json.load(f)
             
-        for code, center in calibrated_centers.items():
-            detector.color_detector.color_centers_lab[code] = np.array(center)
-            
-        print("Successfully loaded calibration from log!")
+        centers, legacy = parse_calibration_data(calibrated_centers)
+        detector.color_detector.color_centers_lab.update(centers)
+        if legacy:
+            print("Loaded legacy calibration without variability metrics. Recalibration is recommended.")
+        else:
+            print("Successfully loaded calibration profile!")
         return True
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, ValueError) as e:
         print(f"Could not parse calibration data: {e}. Using defaults.")
         return False
 

@@ -59,3 +59,22 @@ class CalibrationTracker:
             return None
 
         return np.median(np.vstack(self._samples), axis=0)
+
+    def profile(self):
+        """Summarize the accepted observations for persistence and later analysis."""
+        if not self._samples or self._started_at is None or self._last_observed_at is None:
+            return None
+        observations = np.vstack(self._samples)
+        center = np.median(observations, axis=0)
+        distances = np.linalg.norm(observations - center, axis=1)
+        return {
+            "center_lab": [float(value) for value in center],
+            "channel_std_lab": [float(value) for value in np.std(observations, axis=0)],
+            "distance_percentiles": {
+                "p50": float(np.percentile(distances, 50)),
+                "p90": float(np.percentile(distances, 90)),
+                "p95": float(np.percentile(distances, 95)),
+            },
+            "sample_count": int(len(observations)),
+            "duration_seconds": float(self._last_observed_at - self._started_at),
+        }
