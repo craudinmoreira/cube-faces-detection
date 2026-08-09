@@ -122,6 +122,7 @@ class ColorDetector:
         return self.classify_distances(self.color_distances_lab(lab_color))
 
 class CubeDetector:
+    COLOR_PREPROCESSING_MODES = ('original', 'gray_world', 'hsv_enhanced')
     GRID_SCORE_THRESHOLD = 0.78
     MIN_SQUARE_AREA_RATIO = 0.0005
     MAX_SQUARE_AREA_RATIO = 0.08
@@ -131,9 +132,12 @@ class CubeDetector:
     RECTIFIED_ROI_SIZE = 50
     MAX_HOMOGRAPHY_ERROR = 4.0
 
-    def __init__(self, debug=False):
+    def __init__(self, debug=False, color_preprocess='hsv_enhanced'):
+        if color_preprocess not in self.COLOR_PREPROCESSING_MODES:
+            raise ValueError(f"Unknown color preprocessing mode: {color_preprocess}")
         self.color_detector = ColorDetector()
         self.debug = debug
+        self.color_preprocess = color_preprocess
         self.debug_state = {}
         self.debug_views = {}
         self.last_color_costs = None
@@ -362,6 +366,27 @@ class CubeDetector:
         self.last_color_costs = color_costs if not calibration_mode else None
         return face_colors, rois
 
+    def _preprocess_color_frame(self, frame):
+        if self.color_preprocess == 'original':
+            return frame.copy()
+        if self.color_preprocess == 'gray_world':
+            return self._apply_gray_world(frame)
+        return self._enhance_image(frame)
+
+    @staticmethod
+    def _apply_gray_world(frame):
+        """Normalize channel means to compensate a global illumination cast."""
+        channel_means = np.mean(frame.reshape(-1, 3), axis=0)
+        target_mean = float(np.mean(channel_means))
+        scales = np.divide(
+            target_mean,
+            channel_means,
+            out=np.ones_like(channel_means, dtype=float),
+            where=channel_means > 0,
+        )
+        corrected = frame.astype(np.float32) * scales
+        return np.clip(corrected, 0, 255).astype(np.uint8)
+
     def _enhance_image(self, frame):
         """
         Artificially boosts the saturation of the image to help distinguish pale/washed-out colors.
@@ -388,8 +413,8 @@ class CubeDetector:
         Process the frame to find a 3x3 Rubik's cube face.
         """
         # Boost saturation before any processing happens
-        enhanced_frame = self._enhance_image(frame)
-        annotated_frame = enhanced_frame.copy()
+        color_frame = self._preprocess_color_frame(frame)
+        annotated_frame = color_frame.copy()
         self.debug_state = {}
         self.debug_views = {}
         self.last_color_costs = None
@@ -406,7 +431,7 @@ class CubeDetector:
         
         if sorted_faces:
             face_colors, rois = self._extract_colors_and_draw(
-                enhanced_frame, annotated_frame, sorted_faces, calibration_mode
+                color_frame, annotated_frame, sorted_faces, calibration_mode
             )
             if face_colors is not None:
                 self.debug_state['rejection_reason'] = None

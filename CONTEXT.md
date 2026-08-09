@@ -184,3 +184,15 @@ idênticas, para privilegiar variedade de iluminação e ângulo.
 Observação de uma face fisicamente resolvida, aceita para coleta apenas quando
 as nove leituras concordam com a cor central. A cor esperada de todos os nove
 adesivos é então conhecida sem anotação manual.
+
+### Relatório de avaliação visual
+
+Arquivo CSV/JSON gerado sobre as sessões coletadas. Ele compara imagem original,
+balanço de branco e realce atual, separando métricas de detecção da face, grade
+3×3 e acerto de cor.
+
+### Recomendação de pré-processamento
+
+Conclusão do relatório que só é emitida com ao menos trinta amostras por cor e
+ganho de pelo menos cinco pontos percentuais no acerto de cor, sem regressão na
+detecção ou na grade. Ela não muda automaticamente o processamento padrão.

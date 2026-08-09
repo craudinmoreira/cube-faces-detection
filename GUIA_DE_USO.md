@@ -70,3 +70,20 @@ previsão e metadados.
 Cada cor aceita até 10 exemplos por sessão. Faces quase idênticas são ignoradas;
 por isso, altere iluminação, distância e inclinação entre amostras. Fora de
 `--collect-data`, o programa não grava imagens.
+
+## 7. Comparar técnicas de pré-processamento
+
+Depois de coletar sessões, execute:
+
+```powershell
+python evaluation.py
+```
+
+O comando compara pixels originais, balanço de branco *gray-world* e o realce
+HSV atual. Ele grava `data/reports/evaluation.csv` e `evaluation.json`, com
+métricas de candidatos de face, grade 3×3 e cores por técnica e por cor.
+
+O relatório só recomenda outra técnica quando houver pelo menos 30 exemplos de
+cada cor, ganho mínimo de cinco pontos percentuais em cores e nenhuma piora de
+detecção ou grade. A recomendação não altera o programa: uma troca futura será
+revisada e versionada em commit próprio.
