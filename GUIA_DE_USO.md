@@ -87,3 +87,31 @@ O relatório só recomenda outra técnica quando houver pelo menos 30 exemplos d
 cada cor, ganho mínimo de cinco pontos percentuais em cores e nenhuma piora de
 detecção ou grade. A recomendação não altera o programa: uma troca futura será
 revisada e versionada em commit próprio.
+
+## 8. Anotar imagens difíceis manualmente
+
+Copie imagens inclinadas, com reflexos, com fundos quadrados ou sem cubo para
+`data/to_annotate/`. Depois execute:
+
+```powershell
+python annotation.py
+```
+
+A previsão da grade aparece em amarelo apenas como referência. Para cada
+imagem, pressione `n` se não houver uma face de cubo. Se houver, pressione `y`,
+clique os nove centros em ordem de leitura (esquerda para direita, de cima para
+baixo) e informe as nove cores com `w`, `y`, `g`, `b`, `r` e `o`.
+
+`r` reinicia somente a imagem atual; `q` encerra e mantém o progresso. As
+anotações ficam em `data/annotations.json`, e imagens já anotadas são ignoradas
+na próxima execução.
+
+Para incluir essas métricas no relatório, execute novamente:
+
+```powershell
+python evaluation.py
+```
+
+O JSON passa a mostrar precisão e recall de presença de face, acerto de grade e
+acerto de cor das anotações manuais. Esses números complementam, mas não
+substituem, a comparação automática das faces resolvidas.

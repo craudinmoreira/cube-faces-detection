@@ -93,7 +93,7 @@ terminal lista as posições alteradas. Com `--debug`, esse resultado também fi
 disponível para diagnóstico.
 
 Consulte o [guia de uso](GUIA_DE_USO.md) para instalar, calibrar, capturar,
-recapturar, depurar e coletar imagens de avaliação.
+recapturar, depurar, coletar e anotar imagens de avaliação.
 
 ## ⚙️ Calibração de Cores
 

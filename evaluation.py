@@ -8,6 +8,7 @@ from pathlib import Path
 
 import cv2
 
+from annotations import grid_matches
 from vision import CubeDetector
 
 
@@ -25,6 +26,17 @@ def load_records(data_root):
             record['_directory'] = manifest_path.parent
             records.append(record)
     return records
+
+
+def load_annotations(path='data/annotations.json'):
+    annotation_path = Path(path)
+    if not annotation_path.exists():
+        return []
+    data = json.loads(annotation_path.read_text(encoding='utf-8'))
+    records = data.get('records', {})
+    if not isinstance(records, dict):
+        raise ValueError('Arquivo de anotações inválido.')
+    return list(records.values())
 
 
 def evaluate_records(records, detector_factory=CubeDetector):
@@ -60,6 +72,44 @@ def evaluate_records(records, detector_factory=CubeDetector):
     return results
 
 
+def evaluate_annotations(records, image_root, detector_factory=CubeDetector):
+    """Measure face presence, grid location and color against manual labels."""
+    results = {}
+    for mode in MODES:
+        detector = detector_factory(color_preprocess=mode)
+        totals = defaultdict(int)
+        for record in records:
+            frame = cv2.imread(str(Path(image_root) / record['path']))
+            if frame is None:
+                continue
+            _, detected_colors, _ = detector.process_frame(frame)
+            predicted_centers = detector.last_grid_centers
+            predicted_face = len(predicted_centers) == 9
+            expected_face = record['has_face']
+            totals['samples'] += 1
+            if expected_face:
+                totals['positive_samples'] += 1
+                expected_colors = record.get('expected_colors')
+                if expected_colors:
+                    totals['total_stickers'] += len(expected_colors)
+                if predicted_face:
+                    totals['true_positive'] += 1
+                    grid_correct = grid_matches(record['centers'], predicted_centers)
+                    totals['grid_correct'] += int(grid_correct)
+                    if expected_colors:
+                        if grid_correct and detected_colors is not None:
+                            totals['correct_stickers'] += sum(
+                                actual == expected
+                                for actual, expected in zip(detected_colors, expected_colors)
+                            )
+                else:
+                    totals['false_negative'] += 1
+            elif predicted_face:
+                totals['false_positive'] += 1
+        results[mode] = _manual_metrics(totals)
+    return results
+
+
 def _metrics(totals, by_color):
     def rate(numerator, denominator):
         return numerator / denominator if denominator else 0.0
@@ -79,6 +129,20 @@ def _metrics(totals, by_color):
             'color_accuracy': rate(values['correct_stickers'], values['total_stickers']),
         }
     return summary
+
+
+def _manual_metrics(totals):
+    def rate(numerator, denominator):
+        return numerator / denominator if denominator else 0.0
+
+    return {
+        'samples': totals['samples'],
+        'positive_samples': totals['positive_samples'],
+        'face_precision': rate(totals['true_positive'], totals['true_positive'] + totals['false_positive']),
+        'face_recall': rate(totals['true_positive'], totals['positive_samples']),
+        'grid_accuracy': rate(totals['grid_correct'], totals['positive_samples']),
+        'color_accuracy': rate(totals['correct_stickers'], totals['total_stickers']),
+    }
 
 
 def recommend_preprocessing(results):
@@ -102,24 +166,31 @@ def recommend_preprocessing(results):
     return max(candidates)[1], 'Recomendação baseada em métricas; a troca do padrão requer commit explícito.'
 
 
-def write_report(results, output_dir='data/reports'):
+def write_report(results, output_dir='data/reports', manual_results=None):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     recommendation, reason = recommend_preprocessing(results)
-    report = {'results': results, 'recommendation': recommendation, 'reason': reason}
+    report = {
+        'results': results,
+        'manual_annotations': manual_results or {},
+        'recommendation': recommendation,
+        'reason': reason,
+    }
     (output_path / 'evaluation.json').write_text(
         json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8'
     )
     with (output_path / 'evaluation.csv').open('w', newline='', encoding='utf-8') as file:
         writer = csv.DictWriter(
             file,
-            fieldnames=['mode', 'color', 'samples', 'face_detection_rate', 'grid_detection_rate', 'color_accuracy'],
+            fieldnames=['source', 'mode', 'color', 'samples', 'face_detection_rate', 'grid_detection_rate', 'face_precision', 'face_recall', 'grid_accuracy', 'color_accuracy'],
         )
         writer.writeheader()
         for mode, metrics in results.items():
-            writer.writerow({'mode': mode, 'color': 'all', **{key: metrics[key] for key in writer.fieldnames[2:]}})
+            writer.writerow({'source': 'automatic', 'mode': mode, 'color': 'all', **{key: metrics[key] for key in ('samples', 'face_detection_rate', 'grid_detection_rate', 'color_accuracy')}})
             for color, values in metrics['by_color'].items():
-                writer.writerow({'mode': mode, 'color': color, **values})
+                writer.writerow({'source': 'automatic', 'mode': mode, 'color': color, **values})
+        for mode, metrics in (manual_results or {}).items():
+            writer.writerow({'source': 'manual', 'mode': mode, 'color': 'all', **metrics})
     return report
 
 
@@ -127,11 +198,18 @@ def main():
     parser = argparse.ArgumentParser(description='Evaluate collected Rubik face samples')
     parser.add_argument('--data', default='data/collected', help='Directory containing collection sessions')
     parser.add_argument('--output', default='data/reports', help='Directory for CSV and JSON reports')
+    parser.add_argument('--annotations', default='data/annotations.json', help='Manual annotation JSON')
+    parser.add_argument('--annotated-data', default='data/to_annotate', help='Directory containing annotated images')
     args = parser.parse_args()
+    manual_records = load_annotations(args.annotations)
     records = load_records(args.data)
-    if not records:
-        raise SystemExit('Nenhuma amostra encontrada. Use python main.py --collect-data primeiro.')
-    report = write_report(evaluate_records(records), args.output)
+    if not records and not manual_records:
+        raise SystemExit('Nenhuma amostra encontrada. Use --collect-data ou annotation.py primeiro.')
+    report = write_report(
+        evaluate_records(records),
+        args.output,
+        evaluate_annotations(manual_records, args.annotated_data) if manual_records else None,
+    )
     print(report['reason'])
     print(f"Relatórios salvos em {args.output}")
 

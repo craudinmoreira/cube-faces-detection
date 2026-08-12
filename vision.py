@@ -141,6 +141,7 @@ class CubeDetector:
         self.debug_state = {}
         self.debug_views = {}
         self.last_color_costs = None
+        self.last_grid_centers = []
 
     def _find_squares(self, frame):
         blurred = cv2.GaussianBlur(frame, (5, 5), 0)
@@ -267,6 +268,7 @@ class CubeDetector:
         best_group, best_score = self._select_best_grid(square_contours)
         self.debug_state['grid_score'] = best_score
         if best_group is None or best_score < self.GRID_SCORE_THRESHOLD:
+            self.last_grid_centers = []
             self.debug_state['rejection_reason'] = 'Nenhuma grade 3x3 confiavel.'
             return None
 
@@ -279,7 +281,9 @@ class CubeDetector:
                 'cx': x + w//2,
                 'cy': y + h//2
             })
-            
+        self.last_grid_centers = [
+            (float(face['cx']), float(face['cy'])) for face in centers
+        ]
         return centers
 
     def _rectify_face(self, frame, sorted_faces):
@@ -418,6 +422,7 @@ class CubeDetector:
         self.debug_state = {}
         self.debug_views = {}
         self.last_color_costs = None
+        self.last_grid_centers = []
         
         square_contours = self._find_squares(frame)
         self.debug_state['candidate_count'] = len(square_contours)

@@ -1,8 +1,11 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 import numpy as np
+import cv2
 
-from evaluation import recommend_preprocessing
+from evaluation import evaluate_annotations, recommend_preprocessing
 from vision import CubeDetector
 
 
@@ -70,6 +73,65 @@ class ColorPreprocessingTests(unittest.TestCase):
         processed = CubeDetector(color_preprocess='gray_world')._preprocess_color_frame(frame)
 
         self.assertLess(np.ptp(processed.mean(axis=(0, 1))), np.ptp(frame.mean(axis=(0, 1))))
+
+
+class ManualAnnotationEvaluationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        cv2.imwrite(str(self.root / 'negative.png'), np.zeros((20, 20, 3), dtype=np.uint8))
+        cv2.imwrite(str(self.root / 'positive.png'), np.zeros((20, 20, 3), dtype=np.uint8))
+        self.centers = [
+            [column * 10, row * 10]
+            for row in range(3)
+            for column in range(3)
+        ]
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_negative_image_with_predicted_grid_is_a_false_positive(self):
+        records = [{'path': 'negative.png', 'has_face': False}]
+
+        metrics = evaluate_annotations(records, self.root, detector_factory=AlwaysGridDetector)
+
+        self.assertEqual(0.0, metrics['hsv_enhanced']['face_precision'])
+        self.assertEqual(0.0, metrics['hsv_enhanced']['face_recall'])
+
+    def test_positive_image_scores_a_grid_by_relative_tolerance(self):
+        records = [{
+            'path': 'positive.png',
+            'has_face': True,
+            'centers': self.centers,
+            'expected_colors': ['W'] * 9,
+        }]
+
+        metrics = evaluate_annotations(records, self.root, detector_factory=MatchingGridDetector)
+
+        self.assertEqual(1.0, metrics['hsv_enhanced']['face_precision'])
+        self.assertEqual(1.0, metrics['hsv_enhanced']['face_recall'])
+        self.assertEqual(1.0, metrics['hsv_enhanced']['grid_accuracy'])
+        self.assertEqual(1.0, metrics['hsv_enhanced']['color_accuracy'])
+
+
+class AlwaysGridDetector:
+    def __init__(self, **_):
+        self.last_grid_centers = [(index, 0) for index in range(9)]
+
+    def process_frame(self, _):
+        return None, ['W'] * 9, None
+
+
+class MatchingGridDetector:
+    def __init__(self, **_):
+        self.last_grid_centers = [
+            (column * 10 + 3, row * 10)
+            for row in range(3)
+            for column in range(3)
+        ]
+
+    def process_frame(self, _):
+        return None, ['W'] * 9, None
 
 
 if __name__ == '__main__':

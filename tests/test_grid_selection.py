@@ -68,6 +68,14 @@ class GridSelectionTests(unittest.TestCase):
             [(item['cx'], item['cy']) for item in selected[:5]],
         )
 
+    def test_records_predicted_centers_for_an_annotation_overlay(self):
+        self.detector._group_and_sort_squares(regular_grid())
+
+        self.assertEqual(
+            [(100.0, 120.0), (145.0, 120.0), (190.0, 120.0)],
+            self.detector.last_grid_centers[:3],
+        )
+
     def test_suppresses_overlapping_candidates_by_iou(self):
         large = candidate(100, 100, size=40)
         overlapping = candidate(102, 102, size=36)
