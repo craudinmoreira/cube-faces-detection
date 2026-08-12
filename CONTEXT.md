@@ -196,3 +196,26 @@ balanço de branco e realce atual, separando métricas de detecção da face, gr
 Conclusão do relatório que só é emitida com ao menos trinta amostras por cor e
 ganho de pelo menos cinco pontos percentuais no acerto de cor, sem regressão na
 detecção ou na grade. Ela não muda automaticamente o processamento padrão.
+
+### Amostra anotada manualmente
+
+Imagem escolhida para avaliar geometria de forma independente. Ela registra se
+há uma face, os nove centros esperados e, quando aplicável, as cores esperadas;
+inclui casos difíceis e negativos que a coleta automática não mede.
+
+### Anotação por centros
+
+Fluxo local de `annotation.py`: `y` ou `n` informa a presença de face; em caso
+positivo, nove cliques em ordem de leitura registram os centros e as teclas
+`w/y/g/b/r/o` registram as cores. Uma legenda mantém as etapas visíveis.
+
+### Tolerância de grade anotada
+
+Critério relativo para comparar a grade prevista à grade manual: cada centro
+previsto deve ficar a até 40% do espaçamento mediano entre peças anotadas.
+
+### Fila de anotação
+
+Pasta `data/to_annotate/` onde o usuário coloca imagens difíceis ou negativas.
+`annotation.py` salva a revisão em `data/annotations.json` e ignora imagens já
+anotadas, permitindo retomar o trabalho.
