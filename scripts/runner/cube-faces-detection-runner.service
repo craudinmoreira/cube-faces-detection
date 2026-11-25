@@ -1,0 +1,17 @@
+# Unit systemd de usuário para manter o runner efêmero no ar.
+#   cp scripts/runner/cube-faces-detection-runner.service ~/.config/systemd/user/
+#   scripts/runner/runner.sh build    # a unit não constrói a imagem
+#   systemctl --user daemon-reload && systemctl --user enable --now cube-faces-detection-runner
+#   loginctl enable-linger "$USER"   # continua rodando sem sessão aberta
+[Unit]
+Description=GitHub Actions runner efêmero (cube-faces-detection)
+After=docker.service network-online.target
+
+[Service]
+ExecStart=%h/cube-faces-detection/scripts/runner/runner.sh run
+ExecStop=%h/cube-faces-detection/scripts/runner/runner.sh stop
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

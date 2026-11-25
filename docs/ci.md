@@ -32,6 +32,9 @@ uv run pre-commit install
 | Conventional Commits | cada commit do PR e o título do PR, que vira o commit no squash |
 | **CI ok** | agregador: o único check exigido pelo ruleset da `master` |
 
+Push na `master` e dispatch podem rodar no runner self-hosted; ver
+[runner.md](runner.md).
+
 `codeql.yml` roda a suíte `security-and-quality` para Python e para os
 próprios workflows (`actions`) em PRs, na `master` e toda segunda-feira.
 
