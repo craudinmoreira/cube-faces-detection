@@ -7,3 +7,7 @@ data/collected/
 data/reports/
 data/to_annotate/
 data/annotations.json
+
+# Gerados localmente pelo app
+calibration.json
+calibration_log.txt

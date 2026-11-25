@@ -78,15 +78,35 @@ em [CONTEXT.md](CONTEXT.md).
 | `annotation.py`, `annotations.py` | Anotação manual de casos difíceis |
 | `evaluation.py` | Comparação de abordagens com os dados coletados |
 | `tests/` | Testes automatizados |
+| `scripts/` | Varredura de segredos (gitleaks) |
 
 ## Como rodar
 
-Requer Python 3 e uma webcam.
+Requer Python 3.12+ e uma webcam. As dependências ficam fixadas em `uv.lock`;
+o jeito recomendado de instalar é com o [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv sync
+source .venv/bin/activate
+```
+
+Sem o uv, o `requirements.txt` (gerado a partir do lock, com hashes) também
+funciona:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
+```
+
+A calibração fica em `calibration.json`, criado pelo próprio programa e fora do
+git, porque depende da câmera e da luz de cada máquina.
+`calibration.example.json` mostra o formato legado, só com os centros LAB.
+
+Testes:
+
+```bash
+uv run pytest
 ```
 
 Com a câmera:
