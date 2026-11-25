@@ -1,0 +1,16 @@
+name: Ideia ou experimento
+description: Uma abordagem nova para testar ou uma melhoria.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema ou pergunta
+      description: O que você quer entender ou resolver? Use os termos do CONTEXT.md quando possível.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Abordagem
+      description: Como você mediria se a ideia funcionou (evaluation.py, frames sintéticos, ms por frame)?

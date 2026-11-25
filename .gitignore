@@ -30,3 +30,6 @@ phase1x24_prun
 htmlcov/
 coverage.xml
 .pytest_cache/
+
+# Claude Code: configuração pessoal (a do projeto é .claude/settings.json)
+.claude/settings.local.json
