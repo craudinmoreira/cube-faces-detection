@@ -1,0 +1,44 @@
+name: Release
+
+# A cada push na master, o release-please mantém aberto um "Release PR"
+# (chore(release): vX.Y.Z) com a versão calculada pelos Conventional Commits e
+# o CHANGELOG em pt-BR. Ao mergear esse PR, o release-please cria a tag vX.Y.Z
+# e a GitHub Release com as notas. Não há deploy: a entrega é a release.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release PR e tag
+    # Sempre no GitHub: este job escreve no repo.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write # labels "autorelease: pending/tagged"
+    steps:
+      # Com RELEASE_PLEASE_TOKEN (PAT fine-grained: contents + pull requests), o Release PR
+      # dispara o CI normalmente. Com o GITHUB_TOKEN, o GitHub não roda workflows
+      # em PRs criados por ele, e o check obrigatório "CI ok" não apareceria.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: rp
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Resumo
+        if: steps.rp.outputs.release_created == 'true'
+        env:
+          TAG: ${{ steps.rp.outputs.tag_name }}
+          URL: ${{ steps.rp.outputs.html_url }}
+        run: echo "🏷️ Release [$TAG]($URL) criada." >> "$GITHUB_STEP_SUMMARY"
