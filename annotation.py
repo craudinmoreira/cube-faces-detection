@@ -114,7 +114,7 @@ def run_annotation(input_dir='data/to_annotate', output='data/annotations.json')
         predicted_centers = getattr(detector, 'last_grid_centers', ())
         controller = AnnotationController(relative_path, store)
 
-        def on_click(event, x, y, *_):
+        def on_click(event, x, y, *_, controller=controller):
             if event == cv2.EVENT_LBUTTONDOWN:
                 controller.add_center((x, y))
 

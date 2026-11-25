@@ -27,7 +27,7 @@ class FaceDisplay:
         img[:] = (40, 40, 40)  # Dark gray background
 
         # Draw placeholder outlines for all faces
-        for face_name, (offset_x, offset_y) in self.face_offsets.items():
+        for offset_x, offset_y in self.face_offsets.values():
             cv2.rectangle(
                 img,
                 (offset_x, offset_y),

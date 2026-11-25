@@ -66,11 +66,13 @@ class ColorDetector:
                         "Calibração legada carregada sem métricas de variabilidade; "
                         "recalibre para atualizar o perfil.",
                         UserWarning,
+                        stacklevel=2,
                     )
             except (OSError, json.JSONDecodeError, ValueError) as error:
                 warnings.warn(
                     f"Não foi possível carregar a calibração; usando centros padrão: {error}",
                     UserWarning,
+                    stacklevel=2,
                 )
 
         # Used for drawing UI
@@ -255,7 +257,7 @@ class CubeDetector:
         candidate_centers = [self._candidate_center(candidate) for candidate in square_contours]
         best_group = None
         best_score = 0.0
-        for seed_index, seed_center in enumerate(candidate_centers):
+        for seed_center in candidate_centers:
             distances = [
                 (np.linalg.norm(center - seed_center), index)
                 for index, center in enumerate(candidate_centers)
@@ -278,7 +280,7 @@ class CubeDetector:
             return None
 
         centers = []
-        for approx, area, bbox in best_group:
+        for approx, _area, bbox in best_group:
             x, y, w, h = bbox
             centers.append({'approx': approx, 'bbox': bbox, 'cx': x + w // 2, 'cy': y + h // 2})
         self.last_grid_centers = [(float(face['cx']), float(face['cy'])) for face in centers]

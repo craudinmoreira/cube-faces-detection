@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import time
 from datetime import UTC, datetime
 
@@ -161,9 +162,6 @@ def calibrate_colors(cap, detector):
 
     print("\nTransitioning to Scan Mode...\n")
     return True
-
-
-import os
 
 
 def load_calibration_from_log(detector):
