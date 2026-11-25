@@ -1,0 +1,147 @@
+name: CI
+
+# Gate de qualidade: todo PR precisa deste workflow verde para entrar na master.
+# O check obrigatório no ruleset da branch é o job "CI ok".
+on:
+  pull_request:
+  push:
+    branches: [master]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_LOCKED: "1" # falha se o uv.lock estiver desatualizado em relação ao pyproject.toml
+
+jobs:
+  lint:
+    name: Lint e hooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - run: uv sync
+      # Os mesmos hooks do pre-commit local. O gitleaks roda no job de segurança
+      # (histórico inteiro) e o pytest no job de testes.
+      - name: pre-commit em todos os arquivos
+        env:
+          SKIP: gitleaks,pytest
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  tests:
+    name: Testes (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync
+      - run: uv run pytest --cov --cov-report=term
+      - name: Cobertura no resumo do job
+        if: always()
+        run: uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+
+  perf:
+    name: Orçamento do pipeline de visão
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - run: uv sync
+      - name: Tempo por frame e reconhecimento
+        run: |
+          set -o pipefail
+          uv run python scripts/bench_pipeline.py | tee bench.json
+          { echo '### Pipeline de visão'; echo '```json'; cat bench.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  security:
+    name: Segredos e dependências
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - name: gitleaks (histórico completo)
+        run: scripts/install-gitleaks.sh && PATH="$HOME/.local/bin:$PATH" scripts/gitleaks.sh history
+      - name: pip-audit (dependências do lock)
+        run: uvx --from pip-audit==2.10.1 pip-audit --strict --require-hashes --disable-pip -r requirements.txt
+      # Exige o dependency graph ligado no repo (Settings › Code security).
+      # Ligue-o e crie a variável de repositório DEPENDENCY_GRAPH_ENABLED=true.
+      - name: Dependency review
+        if: github.event_name == 'pull_request' && vars.DEPENDENCY_GRAPH_ENABLED == 'true'
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+
+  conventions:
+    name: Conventional Commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - run: uv sync
+      - name: Commits do PR e título
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          # O merge é squash: o título do PR vira o commit na master e entra no CHANGELOG.
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          check() {
+            printf '%s\n' "$1" > "$RUNNER_TEMP/msg"
+            uv run pre-commit run conventional-pre-commit --hook-stage commit-msg \
+              --commit-msg-filename "$RUNNER_TEMP/msg"
+          }
+          status=0
+          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            echo "::group::$(git log -1 --format='%h %s' "$sha")"
+            check "$(git log -1 --format=%B "$sha")" || status=1
+            echo "::endgroup::"
+          done
+          echo "Título do PR: $TITLE"
+          check "$TITLE" || status=1
+          exit "$status"
+
+  ci-ok:
+    name: CI ok
+    if: always()
+    needs: [lint, tests, perf, security, conventions]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Todos os jobs passaram (ou foram pulados de propósito)
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) exit 1 ;; esac
+          done
