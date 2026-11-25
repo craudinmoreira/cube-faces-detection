@@ -23,3 +23,10 @@ move_flip
 move_slice_sorted
 move_twist
 phase1x24_prun
+
+# Testes
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.pytest_cache/

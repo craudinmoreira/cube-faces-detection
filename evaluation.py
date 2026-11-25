@@ -182,7 +182,7 @@ def write_report(results, output_dir='data/reports', manual_results=None):
     with (output_path / 'evaluation.csv').open('w', newline='', encoding='utf-8') as file:
         writer = csv.DictWriter(
             file,
-            fieldnames=['source', 'mode', 'color', 'samples', 'face_detection_rate', 'grid_detection_rate', 'face_precision', 'face_recall', 'grid_accuracy', 'color_accuracy'],
+            fieldnames=['source', 'mode', 'color', 'samples', 'positive_samples', 'face_detection_rate', 'grid_detection_rate', 'face_precision', 'face_recall', 'grid_accuracy', 'color_accuracy'],
         )
         writer.writeheader()
         for mode, metrics in results.items():

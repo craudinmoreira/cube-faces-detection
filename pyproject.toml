@@ -23,3 +23,13 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*", ".venv/*", "scripts/*"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 68
+show_missing = false
+skip_covered = false

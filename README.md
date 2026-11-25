@@ -78,7 +78,7 @@ em [CONTEXT.md](CONTEXT.md).
 | `annotation.py`, `annotations.py` | Anotação manual de casos difíceis |
 | `evaluation.py` | Comparação de abordagens com os dados coletados |
 | `tests/` | Testes automatizados |
-| `scripts/` | Varredura de segredos (gitleaks) |
+| `scripts/` | Varredura de segredos (gitleaks) e orçamento do pipeline |
 
 ## Como rodar
 
@@ -103,10 +103,11 @@ A calibração fica em `calibration.json`, criado pelo próprio programa e fora 
 git, porque depende da câmera e da luz de cada máquina.
 `calibration.example.json` mostra o formato legado, só com os centros LAB.
 
-Testes:
+Testes (detalhes em [docs/testing.md](docs/testing.md)):
 
 ```bash
-uv run pytest
+uv run pytest --cov
+uv run python scripts/bench_pipeline.py
 ```
 
 Com a câmera:
