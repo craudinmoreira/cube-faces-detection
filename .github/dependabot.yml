@@ -36,3 +36,12 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # Imagem base do runner self-hosted (tag + digest em scripts/runner/Dockerfile).
+  - package-ecosystem: docker
+    directory: /scripts/runner
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci(deps)"

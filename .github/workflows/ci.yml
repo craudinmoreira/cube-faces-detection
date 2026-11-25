@@ -2,6 +2,10 @@ name: CI
 
 # Gate de qualidade: todo PR precisa deste workflow verde para entrar na master.
 # O check obrigatório no ruleset da branch é o job "CI ok".
+#
+# Runner: PRs (inclusive de fork) e merge queue rodam sempre no GitHub. Push na
+# master e dispatch usam o runner self-hosted efêmero quando
+# vars.SELF_HOSTED_RUNNER == 'true' (scripts/runner/, docs/runner.md).
 on:
   pull_request:
   push:
@@ -22,7 +26,7 @@ env:
 jobs:
   lint:
     name: Lint e hooks
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.SELF_HOSTED_RUNNER == 'true' && fromJSON('["self-hosted","linux","x64","cube-faces-detection"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,7 +43,7 @@ jobs:
 
   tests:
     name: Testes (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.SELF_HOSTED_RUNNER == 'true' && fromJSON('["self-hosted","linux","x64","cube-faces-detection"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -60,7 +64,7 @@ jobs:
 
   perf:
     name: Orçamento do pipeline de visão
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.SELF_HOSTED_RUNNER == 'true' && fromJSON('["self-hosted","linux","x64","cube-faces-detection"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,7 +80,7 @@ jobs:
 
   security:
     name: Segredos e dependências
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.SELF_HOSTED_RUNNER == 'true' && fromJSON('["self-hosted","linux","x64","cube-faces-detection"]') || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
