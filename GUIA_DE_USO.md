@@ -2,12 +2,20 @@
 
 ## 1. Instalação
 
-No diretório do projeto, crie o ambiente virtual e instale as dependências:
+No diretório do projeto, instale as dependências com o
+[uv](https://docs.astral.sh/uv/):
+
+```powershell
+uv sync
+.\.venv\Scripts\Activate.ps1
+```
+
+Sem o uv:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
 ```
 
 ## 2. Iniciar a câmera
@@ -18,7 +26,8 @@ python main.py
 
 Escolha a calibração no menu. Para uma calibração nova, mostre uma face
 **resolvida** de cada cor; mantenha-a estável por cerca de um segundo. O
-programa guarda o centro LAB e medidas de variabilidade em `calibration.json`.
+programa guarda o centro LAB e medidas de variabilidade em `calibration.json`. Esse arquivo é local e fica
+fora do git.
 
 ## 3. Capturar um cubo para resolver
 

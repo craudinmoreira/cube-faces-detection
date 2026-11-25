@@ -1,0 +1,25 @@
+[project]
+name = "cube-faces-detection"
+version = "0.0.0"
+description = "Estudo experimental de detecção das faces de um cubo mágico com OpenCV."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy==2.4.4",
+    "opencv-python==4.13.0.92",
+    "rubik-cube==0.0.2",
+    "RubikOptimal==1.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

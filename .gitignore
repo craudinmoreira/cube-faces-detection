@@ -7,3 +7,19 @@ data/collected/
 data/reports/
 data/to_annotate/
 data/annotations.json
+
+# Gerados localmente pelo app
+calibration.json
+calibration_log.txt
+
+# Tabelas que o RubikOptimal gera no diretório atual na primeira resolução
+conj_twist
+cornerprun
+fs24_classidx
+fs24_rep
+fs24_sym
+move_corners
+move_flip
+move_slice_sorted
+move_twist
+phase1x24_prun

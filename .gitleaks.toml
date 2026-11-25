@@ -1,0 +1,23 @@
+# Configuração do gitleaks: usada no hook de pre-commit e no CI.
+# Regras padrão + regras deste projeto. Falso positivo? Adicione o
+# fingerprint em .gitleaksignore (nunca desative uma regra inteira).
+title = "cube-faces-detection"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "gcp-service-account"
+description = "Chave JSON de service account do Google Cloud"
+regex = '''"type"\s*:\s*"service_account"'''
+keywords = ["service_account"]
+
+[[rules]]
+id = "pypi-token"
+description = "Token de API do PyPI"
+regex = '''pypi-AgEIcHlwaS5vcmc[0-9A-Za-z_-]{50,}'''
+keywords = ["pypi-ageichlwas5vcmc"]
+
+[allowlist]
+description = "Arquivos gerados sem segredos"
+paths = ['''uv\.lock''', '''requirements\.txt''']
