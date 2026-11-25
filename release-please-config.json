@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "1a29087e05fa484a881ea688b6852636662c3af8",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "pull-request-title-pattern": "chore(release): v${version}",
+  "pull-request-header": "Release PR gerado pelo release-please. Revise as notas abaixo: elas vão para o CHANGELOG e para a GitHub Release. Ao mergear, a tag e a release são criadas.",
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "cube-faces-detection",
+      "release-as": "1.0.0",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='cube-faces-detection')].version"
+        }
+      ],
+      "changelog-sections": [
+        { "type": "feat", "section": "Novidades" },
+        { "type": "fix", "section": "Correções" },
+        { "type": "perf", "section": "Desempenho" },
+        { "type": "revert", "section": "Revertido" },
+        { "type": "docs", "section": "Documentação", "hidden": true },
+        { "type": "test", "section": "Testes", "hidden": true },
+        { "type": "ci", "section": "CI", "hidden": true },
+        { "type": "build", "section": "Build", "hidden": true },
+        { "type": "refactor", "section": "Refatoração", "hidden": true },
+        { "type": "style", "section": "Estilo", "hidden": true },
+        { "type": "chore", "section": "Manutenção", "hidden": true }
+      ]
+    }
+  }
+}

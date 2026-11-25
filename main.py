@@ -13,6 +13,7 @@ from data_collection import DataCollectionSession
 from solver_utils import solve_cube
 from stability import FaceStabilityTracker
 from ui import FaceDisplay
+from version import get_version
 from vision import CubeDetector, parse_calibration_data
 
 CAPTURE_KEY_TO_FACE = {
@@ -596,6 +597,7 @@ def run_image(image_path, debug=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Rubik's Cube Solver with OpenCV")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {get_version()}")
     parser.add_argument("--image", type=str, help="Path to an image to process (optional)")
     parser.add_argument(
         "--skip-calibration",
