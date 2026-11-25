@@ -3,7 +3,6 @@ import unittest
 
 from cube_state import CubeState
 
-
 SOLVED_FACES = {
     'U': ['W'] * 9,
     'R': ['R'] * 9,
@@ -24,8 +23,7 @@ def costs_for_faces(faces):
     colors = ('W', 'Y', 'G', 'B', 'R', 'O')
     return {
         face: [
-            {color: 0.0 if color == observed else 100.0 for color in colors}
-            for observed in values
+            {color: 0.0 if color == observed else 100.0 for color in colors} for observed in values
         ]
         for face, values in faces.items()
     }
@@ -201,8 +199,7 @@ class CubeStateGlobalCorrectionTests(unittest.TestCase):
         state = solved_state()
         colors = tuple(state.center_to_face)
         state.face_color_costs = {
-            face: [{color: 1.0 for color in colors} for _ in range(9)]
-            for face in state.FACE_ORDER
+            face: [{color: 1.0 for color in colors} for _ in range(9)] for face in state.FACE_ORDER
         }
         original_faces = copy.deepcopy(state.faces)
 

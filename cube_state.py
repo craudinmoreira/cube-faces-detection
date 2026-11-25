@@ -8,10 +8,10 @@ class CubeState:
     # Facelet positions and colors follow the URFDLB convention used by
     # Kociemba-compatible solvers.
     CORNER_FACELETS = (
-        (8, 9, 20),    # URF
-        (6, 18, 38),   # UFL
-        (0, 36, 47),   # ULB
-        (2, 45, 11),   # UBR
+        (8, 9, 20),  # URF
+        (6, 18, 38),  # UFL
+        (0, 36, 47),  # ULB
+        (2, 45, 11),  # UBR
         (29, 26, 15),  # DFR
         (27, 44, 24),  # DLF
         (33, 53, 42),  # DBL
@@ -28,10 +28,10 @@ class CubeState:
         ('D', 'R', 'B'),
     )
     EDGE_FACELETS = (
-        (5, 10),   # UR
-        (7, 19),   # UF
-        (3, 37),   # UL
-        (1, 46),   # UB
+        (5, 10),  # UR
+        (7, 19),  # UF
+        (3, 37),  # UL
+        (1, 46),  # UB
         (32, 16),  # DR
         (28, 25),  # DF
         (30, 43),  # DL
@@ -61,17 +61,10 @@ class CubeState:
         self.faces = {}
         # Per-sticker LAB distances collected during a stable camera observation.
         self.face_color_costs = {}
-        
+
         # Default western color scheme
-        self.center_to_face = {
-            'W': 'U',
-            'Y': 'D',
-            'G': 'F',
-            'B': 'B',
-            'R': 'R',
-            'O': 'L'
-        }
-        
+        self.center_to_face = {'W': 'U', 'Y': 'D', 'G': 'F', 'B': 'B', 'R': 'R', 'O': 'L'}
+
     def add_face(self, colors, color_costs=None):
         """
         Takes a list of 9 colors representing a face.
@@ -79,11 +72,11 @@ class CubeState:
         """
         if len(colors) != 9:
             return False
-            
+
         center_color = colors[4]
         if center_color not in self.center_to_face:
             return False
-            
+
         face_name = self.center_to_face[center_color]
         self.faces[face_name] = list(colors)
         if color_costs is not None and len(color_costs) == 9:
@@ -102,8 +95,7 @@ class CubeState:
             return False, None, ["A correção global exige as seis faces capturadas."]
         colors = tuple(self.center_to_face)
         if any(
-            face not in self.face_color_costs
-            or len(self.face_color_costs[face]) != 9
+            face not in self.face_color_costs or len(self.face_color_costs[face]) != 9
             for face in self.FACE_ORDER
         ):
             return False, None, ["Dados de confiança das cores estão ausentes; recapture as faces."]
@@ -114,7 +106,11 @@ class CubeState:
                 if position == 4:
                     continue
                 if not all(color in costs for color in colors):
-                    return False, None, ["Dados de confiança das cores estão incompletos; recapture as faces."]
+                    return (
+                        False,
+                        None,
+                        ["Dados de confiança das cores estão incompletos; recapture as faces."],
+                    )
                 stickers.append((face_name, position, costs))
 
         assignment, best_cost = self._minimum_cost_assignment(stickers, colors)
@@ -136,9 +132,11 @@ class CubeState:
         is_valid, errors = candidate.validate_solvability()
         if not is_valid:
             suspect_faces = self._suspect_faces(stickers)
-            return False, None, errors + [
-                "Faces mais suspeitas para recaptura: " + ", ".join(suspect_faces) + "."
-            ]
+            return (
+                False,
+                None,
+                errors + ["Faces mais suspeitas para recaptura: " + ", ".join(suspect_faces) + "."],
+            )
 
         self.faces = candidate_faces
         return True, {"changes": changes, "cost": best_cost}, []
@@ -161,7 +159,9 @@ class CubeState:
             add_edge(source, sticker_node, 1, 0)
             for color_index, color in enumerate(colors):
                 if (sticker_index, color) not in forbidden:
-                    add_edge(sticker_node, color_offset + color_index, 1, int(round(costs[color] * 1000)))
+                    add_edge(
+                        sticker_node, color_offset + color_index, 1, int(round(costs[color] * 1000))
+                    )
         for color_index in range(len(colors)):
             add_edge(color_offset + color_index, sink, 8, 0)
 
@@ -260,9 +260,7 @@ class CubeState:
             if colors is None:
                 continue
             if len(colors) != 9:
-                errors.append(
-                    f"A face {face_name} tem {len(colors)} peças; esperado: 9."
-                )
+                errors.append(f"A face {face_name} tem {len(colors)} peças; esperado: 9.")
                 continue
 
             all_colors.extend(colors)
@@ -277,9 +275,7 @@ class CubeState:
 
         unknown_colors = sorted(set(all_colors) - allowed_colors)
         if unknown_colors:
-            errors.append(
-                f"Cores desconhecidas: {', '.join(repr(c) for c in unknown_colors)}."
-            )
+            errors.append(f"Cores desconhecidas: {', '.join(repr(c) for c in unknown_colors)}.")
 
         counts = Counter(all_colors)
         for color in self.center_to_face:
@@ -324,9 +320,7 @@ class CubeState:
                 None,
             )
             if orientation is None:
-                errors.append(
-                    f"Canto na posição {position} não contém uma cor U/D: {colors}."
-                )
+                errors.append(f"Canto na posição {position} não contém uma cor U/D: {colors}.")
                 continue
 
             side_1 = colors[(orientation + 1) % 3]
@@ -387,9 +381,7 @@ class CubeState:
             if sum(edge_orientations) % 2 != 0:
                 errors.append("A orientação das arestas é fisicamente impossível.")
 
-        corners_complete = (
-            len(corner_permutation) == 8 and len(set(corner_permutation)) == 8
-        )
+        corners_complete = len(corner_permutation) == 8 and len(set(corner_permutation)) == 8
         edges_complete = len(edge_permutation) == 12 and len(set(edge_permutation)) == 12
         if corners_complete and edges_complete:
             if self._permutation_parity(corner_permutation) != self._permutation_parity(
@@ -404,7 +396,17 @@ class CubeState:
         """Return a 3x3 face rotated clockwise by 90 degrees."""
         if len(colors) != 9:
             raise ValueError("A face must contain exactly 9 colors.")
-        return [colors[6], colors[3], colors[0], colors[7], colors[4], colors[1], colors[8], colors[5], colors[2]]
+        return [
+            colors[6],
+            colors[3],
+            colors[0],
+            colors[7],
+            colors[4],
+            colors[1],
+            colors[8],
+            colors[5],
+            colors[2],
+        ]
 
     @classmethod
     def _rotate_face(cls, colors, quarter_turns):
@@ -449,7 +451,7 @@ class CubeState:
         resolved_faces, rotations = next(iter(valid_states.values()))
         self.faces = {face_name: list(colors) for face_name, colors in resolved_faces.items()}
         return True, [], dict(zip(self.FACE_ORDER, rotations))
-        
+
     def get_missing_faces(self):
         all_faces = set(self.center_to_face.values())
         return list(all_faces - set(self.faces.keys()))
@@ -458,7 +460,7 @@ class CubeState:
         """
         Converts the captured 6 faces into the 54-character string format
         required by pglass/cube (rubik-cube python package).
-        
+
         Layout:
                      UP (U)
                      0  1  2
@@ -475,49 +477,49 @@ class CubeState:
         """
         if not self.is_complete():
             raise ValueError("Cube state is not complete.")
-            
+
         result = [''] * 54
-        
+
         # UP face
         for i in range(9):
             result[i] = self.faces['U'][i]
-            
+
         # DOWN face
         for i in range(9):
             result[45 + i] = self.faces['D'][i]
-            
+
         # Middle band (L, F, R, B)
         # Row 1
         result[9:12] = self.faces['L'][0:3]
         result[12:15] = self.faces['F'][0:3]
         result[15:18] = self.faces['R'][0:3]
         result[18:21] = self.faces['B'][0:3]
-        
+
         # Row 2
         result[21:24] = self.faces['L'][3:6]
         result[24:27] = self.faces['F'][3:6]
         result[27:30] = self.faces['R'][3:6]
         result[30:33] = self.faces['B'][3:6]
-        
+
         # Row 3
         result[33:36] = self.faces['L'][6:9]
         result[36:39] = self.faces['F'][6:9]
         result[39:42] = self.faces['R'][6:9]
         result[42:45] = self.faces['B'][6:9]
-        
+
         return "".join(result)
 
     def to_kociemba_string(self):
         """
         Converts the captured 6 faces into the 54-character string format
         required by Kociemba's algorithm.
-        
+
         Layout order: U, R, F, D, L, B.
         Characters must be the face identifiers ('U', 'R', 'F', 'D', 'L', 'B').
         """
         if not self.is_complete():
             raise ValueError("Cube state is not complete.")
-            
+
         result = ""
         for face_name in ['U', 'R', 'F', 'D', 'L', 'B']:
             for color in self.faces[face_name]:

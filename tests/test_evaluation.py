@@ -1,9 +1,9 @@
-import unittest
 import tempfile
+import unittest
 from pathlib import Path
 
-import numpy as np
 import cv2
+import numpy as np
 
 from evaluation import evaluate_annotations, recommend_preprocessing
 from vision import CubeDetector
@@ -81,11 +81,7 @@ class ManualAnnotationEvaluationTests(unittest.TestCase):
         self.root = Path(self.temp_dir.name)
         cv2.imwrite(str(self.root / 'negative.png'), np.zeros((20, 20, 3), dtype=np.uint8))
         cv2.imwrite(str(self.root / 'positive.png'), np.zeros((20, 20, 3), dtype=np.uint8))
-        self.centers = [
-            [column * 10, row * 10]
-            for row in range(3)
-            for column in range(3)
-        ]
+        self.centers = [[column * 10, row * 10] for row in range(3) for column in range(3)]
 
     def tearDown(self):
         self.temp_dir.cleanup()
@@ -99,12 +95,14 @@ class ManualAnnotationEvaluationTests(unittest.TestCase):
         self.assertEqual(0.0, metrics['hsv_enhanced']['face_recall'])
 
     def test_positive_image_scores_a_grid_by_relative_tolerance(self):
-        records = [{
-            'path': 'positive.png',
-            'has_face': True,
-            'centers': self.centers,
-            'expected_colors': ['W'] * 9,
-        }]
+        records = [
+            {
+                'path': 'positive.png',
+                'has_face': True,
+                'centers': self.centers,
+                'expected_colors': ['W'] * 9,
+            }
+        ]
 
         metrics = evaluate_annotations(records, self.root, detector_factory=MatchingGridDetector)
 
@@ -125,9 +123,7 @@ class AlwaysGridDetector:
 class MatchingGridDetector:
     def __init__(self, **_):
         self.last_grid_centers = [
-            (column * 10 + 3, row * 10)
-            for row in range(3)
-            for column in range(3)
+            (column * 10 + 3, row * 10) for row in range(3) for column in range(3)
         ]
 
     def process_frame(self, _):

@@ -13,8 +13,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.7.0",
     "pytest",
     "pytest-cov",
+    "ruff>=0.17.6",
 ]
 
 [tool.uv]
@@ -33,3 +35,21 @@ branch = true
 fail_under = 68
 show_missing = false
 skip_covered = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "preserve"
+
+[tool.ruff.lint]
+# E/W/F: pycodestyle e pyflakes; B: bugbear; S: regras do bandit (segurança);
+# UP: sintaxe moderna; I: ordem dos imports.
+select = ["E", "F", "W", "B", "S", "UP", "I"]
+# E501: o formatter cuida do comprimento; sobram strings e comentários longos.
+# B905: zip(strict=) mudaria o comportamento de comparações de tamanho diferente.
+ignore = ["E501", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]

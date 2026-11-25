@@ -103,6 +103,9 @@ A calibração fica em `calibration.json`, criado pelo próprio programa e fora 
 git, porque depende da câmera e da luz de cada máquina.
 `calibration.example.json` mostra o formato legado, só com os centros LAB.
 
+Para contribuir, instale os hooks (`uv run pre-commit install`); o que eles e o
+CI verificam está em [docs/ci.md](docs/ci.md).
+
 Testes (detalhes em [docs/testing.md](docs/testing.md)):
 
 ```bash

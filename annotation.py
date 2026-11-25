@@ -8,7 +8,6 @@ import cv2
 from annotations import AnnotationStore
 from vision import CubeDetector
 
-
 COLOR_KEYS = {
     ord('w'): 'W',
     ord('y'): 'Y',
@@ -70,10 +69,28 @@ def _draw_annotation(frame, controller, predicted_centers, index, total):
         cv2.circle(view, (int(x), int(y)), 6, (0, 255, 255), 2)
     for center_number, (x, y) in enumerate(controller.centers, start=1):
         cv2.circle(view, (x, y), 6, (0, 255, 0), -1)
-        cv2.putText(view, str(center_number), (x + 8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-    cv2.putText(view, f'Imagem {index}/{total}: {controller.relative_path}', (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(
+            view, str(center_number), (x + 8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1
+        )
+    cv2.putText(
+        view,
+        f'Imagem {index}/{total}: {controller.relative_path}',
+        (10, 25),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (255, 255, 255),
+        1,
+    )
     cv2.putText(view, controller.stage, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-    cv2.putText(view, 'r reinicia | q sai | amarelo = previsao', (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 220, 220), 1)
+    cv2.putText(
+        view,
+        'r reinicia | q sai | amarelo = previsao',
+        (10, 75),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.45,
+        (220, 220, 220),
+        1,
+    )
     return view
 
 
@@ -97,13 +114,15 @@ def run_annotation(input_dir='data/to_annotate', output='data/annotations.json')
         predicted_centers = getattr(detector, 'last_grid_centers', ())
         controller = AnnotationController(relative_path, store)
 
-        def on_click(event, x, y, *_):
+        def on_click(event, x, y, *_, controller=controller):
             if event == cv2.EVENT_LBUTTONDOWN:
                 controller.add_center((x, y))
 
         cv2.setMouseCallback(window, on_click)
         while True:
-            cv2.imshow(window, _draw_annotation(image, controller, predicted_centers, index, len(pending)))
+            cv2.imshow(
+                window, _draw_annotation(image, controller, predicted_centers, index, len(pending))
+            )
             key = cv2.waitKey(20) & 0xFF
             if key == ord('q'):
                 cv2.destroyAllWindows()
@@ -124,7 +143,9 @@ def run_annotation(input_dir='data/to_annotate', output='data/annotations.json')
 def main():
     parser = argparse.ArgumentParser(description='Anote casos difíceis da visão do cubo')
     parser.add_argument('--input', default='data/to_annotate', help='Pasta com imagens a anotar')
-    parser.add_argument('--output', default='data/annotations.json', help='Arquivo JSON de anotações')
+    parser.add_argument(
+        '--output', default='data/annotations.json', help='Arquivo JSON de anotações'
+    )
     args = parser.parse_args()
     run_annotation(args.input, args.output)
 

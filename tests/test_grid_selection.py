@@ -50,9 +50,15 @@ class GridSelectionTests(unittest.TestCase):
 
     def test_rejects_irregular_grid(self):
         candidates = [
-            candidate(100, 100), candidate(180, 105), candidate(260, 100),
-            candidate(105, 150), candidate(185, 210), candidate(255, 160),
-            candidate(95, 230), candidate(180, 280), candidate(275, 240),
+            candidate(100, 100),
+            candidate(180, 105),
+            candidate(260, 100),
+            candidate(105, 150),
+            candidate(185, 210),
+            candidate(255, 160),
+            candidate(95, 230),
+            candidate(180, 280),
+            candidate(275, 240),
         ]
 
         selected = self.detector._group_and_sort_squares(candidates)

@@ -17,8 +17,7 @@ class ColorDetectorConfidenceTests(unittest.TestCase):
 
     def test_rejects_a_color_between_red_and_orange(self):
         ambiguous = (
-            self.detector.color_centers_lab['R']
-            + self.detector.color_centers_lab['O']
+            self.detector.color_centers_lab['R'] + self.detector.color_centers_lab['O']
         ) / 2
 
         result = self.detector.classify_lab(ambiguous)
@@ -53,9 +52,11 @@ class ColorDetectorConfidenceTests(unittest.TestCase):
         np.testing.assert_array_equal(np.array([1.0, 2.0, 3.0]), centers['R'])
 
     def test_warns_when_calibration_file_has_invalid_schema(self):
-        with patch('vision.os.path.exists', return_value=True), patch(
-            'builtins.open', mock_open(read_data='{"schema_version": 2, "colors": {}}')
-        ), self.assertWarnsRegex(UserWarning, 'Não foi possível carregar'):
+        with (
+            patch('vision.os.path.exists', return_value=True),
+            patch('builtins.open', mock_open(read_data='{"schema_version": 2, "colors": {}}')),
+            self.assertWarnsRegex(UserWarning, 'Não foi possível carregar'),
+        ):
             ColorDetector(calibration_path='invalid.json')
 
 

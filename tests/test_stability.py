@@ -2,7 +2,6 @@ import unittest
 
 from stability import FaceStabilityTracker
 
-
 FACE = ['R'] * 9
 
 

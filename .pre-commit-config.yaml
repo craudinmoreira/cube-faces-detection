@@ -1,0 +1,71 @@
+# Hooks locais (git). Instale uma vez por clone:
+#   uv run pre-commit install
+# O CI roda os mesmos hooks (.github/workflows/ci.yml), então pular um hook
+# localmente só adia a falha.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (segredos no stage)
+        entry: scripts/gitleaks.sh staged
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: forbid-sensitive-files
+        name: bloqueia dados locais e imagens de câmera
+        description: >
+          Calibração, .env, dados de coleta, tabelas do solver e mídia ficam fora
+          do git. Imagem de documentação vai em docs/ e deve ser revisada à mão.
+        language: fail
+        entry: "Arquivo sensível ou gerado localmente; ele não deve ser commitado:"
+        files: >-
+          (?x)(
+            (^|/)calibration\.json$ | (^|/)calibration_log\.txt$ |
+            (^|/)\.env(\..*)?$ | ^data/ |
+            \.(png|jpe?g|bmp|gif|tiff?|webp|heic|mp4|avi|mov|mkv|npy|npz|pkl|pickle)$
+          )
+        exclude: ^docs/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 9026c9127e153371d7a78dfcb0c45ae2046a3d10 # frozen: v0.17.6
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 81f5f4cd875cc74ecfdfae601ae47d3fd200ad8d # frozen: 0.13.10
+    hooks:
+      - id: uv-lock
+      - id: uv-export
+        args: [--format, requirements-txt, --no-dev, --no-emit-project, -o, requirements.txt, --quiet]
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: 33b50eb042bee26eac0ee96ad84aa9c1b4dccdd8 # frozen: v4.5.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest com cobertura (pre-push)
+        entry: uv run pytest -q --cov
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

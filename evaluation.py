@@ -11,7 +11,6 @@ import cv2
 from annotations import grid_matches
 from vision import CubeDetector
 
-
 MODES = CubeDetector.COLOR_PREPROCESSING_MODES
 MIN_SAMPLES_PER_COLOR = 30
 MIN_ACCURACY_GAIN = 0.05
@@ -138,7 +137,9 @@ def _manual_metrics(totals):
     return {
         'samples': totals['samples'],
         'positive_samples': totals['positive_samples'],
-        'face_precision': rate(totals['true_positive'], totals['true_positive'] + totals['false_positive']),
+        'face_precision': rate(
+            totals['true_positive'], totals['true_positive'] + totals['false_positive']
+        ),
         'face_recall': rate(totals['true_positive'], totals['positive_samples']),
         'grid_accuracy': rate(totals['grid_correct'], totals['positive_samples']),
         'color_accuracy': rate(totals['correct_stickers'], totals['total_stickers']),
@@ -149,7 +150,10 @@ def recommend_preprocessing(results):
     """Recommend a mode only when the approved evidence threshold is met."""
     baseline = results['hsv_enhanced']
     colors = ('W', 'Y', 'G', 'B', 'R', 'O')
-    if any(baseline['by_color'].get(color, {}).get('samples', 0) < MIN_SAMPLES_PER_COLOR for color in colors):
+    if any(
+        baseline['by_color'].get(color, {}).get('samples', 0) < MIN_SAMPLES_PER_COLOR
+        for color in colors
+    ):
         return None, 'Dados insuficientes: são necessárias 30 amostras por cor.'
     candidates = []
     for mode, metrics in results.items():
@@ -163,7 +167,9 @@ def recommend_preprocessing(results):
             candidates.append((metrics['color_accuracy'], mode))
     if not candidates:
         return None, 'Nenhuma técnica supera o realce atual pelos critérios aprovados.'
-    return max(candidates)[1], 'Recomendação baseada em métricas; a troca do padrão requer commit explícito.'
+    return max(candidates)[
+        1
+    ], 'Recomendação baseada em métricas; a troca do padrão requer commit explícito.'
 
 
 def write_report(results, output_dir='data/reports', manual_results=None):
@@ -182,11 +188,38 @@ def write_report(results, output_dir='data/reports', manual_results=None):
     with (output_path / 'evaluation.csv').open('w', newline='', encoding='utf-8') as file:
         writer = csv.DictWriter(
             file,
-            fieldnames=['source', 'mode', 'color', 'samples', 'positive_samples', 'face_detection_rate', 'grid_detection_rate', 'face_precision', 'face_recall', 'grid_accuracy', 'color_accuracy'],
+            fieldnames=[
+                'source',
+                'mode',
+                'color',
+                'samples',
+                'positive_samples',
+                'face_detection_rate',
+                'grid_detection_rate',
+                'face_precision',
+                'face_recall',
+                'grid_accuracy',
+                'color_accuracy',
+            ],
         )
         writer.writeheader()
         for mode, metrics in results.items():
-            writer.writerow({'source': 'automatic', 'mode': mode, 'color': 'all', **{key: metrics[key] for key in ('samples', 'face_detection_rate', 'grid_detection_rate', 'color_accuracy')}})
+            writer.writerow(
+                {
+                    'source': 'automatic',
+                    'mode': mode,
+                    'color': 'all',
+                    **{
+                        key: metrics[key]
+                        for key in (
+                            'samples',
+                            'face_detection_rate',
+                            'grid_detection_rate',
+                            'color_accuracy',
+                        )
+                    },
+                }
+            )
             for color, values in metrics['by_color'].items():
                 writer.writerow({'source': 'automatic', 'mode': mode, 'color': color, **values})
         for mode, metrics in (manual_results or {}).items():
@@ -196,15 +229,25 @@ def write_report(results, output_dir='data/reports', manual_results=None):
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate collected Rubik face samples')
-    parser.add_argument('--data', default='data/collected', help='Directory containing collection sessions')
-    parser.add_argument('--output', default='data/reports', help='Directory for CSV and JSON reports')
-    parser.add_argument('--annotations', default='data/annotations.json', help='Manual annotation JSON')
-    parser.add_argument('--annotated-data', default='data/to_annotate', help='Directory containing annotated images')
+    parser.add_argument(
+        '--data', default='data/collected', help='Directory containing collection sessions'
+    )
+    parser.add_argument(
+        '--output', default='data/reports', help='Directory for CSV and JSON reports'
+    )
+    parser.add_argument(
+        '--annotations', default='data/annotations.json', help='Manual annotation JSON'
+    )
+    parser.add_argument(
+        '--annotated-data', default='data/to_annotate', help='Directory containing annotated images'
+    )
     args = parser.parse_args()
     manual_records = load_annotations(args.annotations)
     records = load_records(args.data)
     if not records and not manual_records:
-        raise SystemExit('Nenhuma amostra encontrada. Use --collect-data ou annotation.py primeiro.')
+        raise SystemExit(
+            'Nenhuma amostra encontrada. Use --collect-data ou annotation.py primeiro.'
+        )
     report = write_report(
         evaluate_records(records),
         args.output,

@@ -21,8 +21,9 @@ class MainHelperTests(unittest.TestCase):
         detector = FakeDetector()
         calibration = '{"R": [1.0, 2.0, 3.0]}'
 
-        with patch('main.os.path.exists', return_value=True), patch(
-            'builtins.open', mock_open(read_data=calibration)
+        with (
+            patch('main.os.path.exists', return_value=True),
+            patch('builtins.open', mock_open(read_data=calibration)),
         ):
             loaded = main.load_calibration_from_log(detector)
 
@@ -35,8 +36,9 @@ class MainHelperTests(unittest.TestCase):
         detector = FakeDetector()
         calibration = '{"schema_version": 2, "colors": {"R": {"center_lab": [1, 2, 3]}}}'
 
-        with patch('main.os.path.exists', return_value=True), patch(
-            'builtins.open', mock_open(read_data=calibration)
+        with (
+            patch('main.os.path.exists', return_value=True),
+            patch('builtins.open', mock_open(read_data=calibration)),
         ):
             loaded = main.load_calibration_from_log(detector)
 
@@ -46,9 +48,7 @@ class MainHelperTests(unittest.TestCase):
         )
 
     def test_legend_lists_each_recapture_key(self):
-        self.assertEqual(
-            {'U', 'R', 'F', 'D', 'L', 'B'}, set(main.CAPTURE_KEY_TO_FACE.values())
-        )
+        self.assertEqual({'U', 'R', 'F', 'D', 'L', 'B'}, set(main.CAPTURE_KEY_TO_FACE.values()))
         legend = ' '.join(main.CAPTURE_LEGEND).lower()
         for key in ('u', 'r', 'f', 'd', 'l', 'b'):
             self.assertIn(key, legend)

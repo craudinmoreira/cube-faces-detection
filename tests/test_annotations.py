@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from annotations import AnnotationStore, grid_matches
 from annotation import AnnotationController
+from annotations import AnnotationStore, grid_matches
 
 
 class AnnotationStoreTests(unittest.TestCase):
@@ -57,11 +57,7 @@ class AnnotationStoreTests(unittest.TestCase):
 
 class GridMatchingTests(unittest.TestCase):
     def setUp(self):
-        self.centers = [
-            (column * 10, row * 10)
-            for row in range(3)
-            for column in range(3)
-        ]
+        self.centers = [(column * 10, row * 10) for row in range(3) for column in range(3)]
 
     def test_accepts_predictions_within_forty_percent_of_grid_spacing(self):
         predicted = [(x + 4, y) for x, y in self.centers]

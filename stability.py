@@ -1,5 +1,5 @@
-from collections import Counter, deque
 import time
+from collections import Counter, deque
 
 import numpy as np
 
@@ -105,10 +105,7 @@ class FaceStabilityTracker:
         ]
 
     def _discard_expired_observations(self, observed_at):
-        while (
-            self._history
-            and observed_at - self._history[0][0] > self.history_window_seconds
-        ):
+        while self._history and observed_at - self._history[0][0] > self.history_window_seconds:
             self._history.popleft()
 
         if self.max_history_frames is not None:

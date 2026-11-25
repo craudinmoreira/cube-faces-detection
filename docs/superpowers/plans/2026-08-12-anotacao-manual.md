@@ -37,6 +37,7 @@ def test_store_skips_an_image_already_annotated():
     store.save('hard.png', has_face=False)
     assert store.pending_images(input_dir) == ['new.png']
 
+
 def test_grid_match_uses_relative_spacing_tolerance():
     centers = [(0, 0), (10, 0), (20, 0)] * 3
     assert grid_matches(centers, [(3, 0), (13, 0), (23, 0)] * 3)
@@ -56,6 +57,7 @@ class AnnotationStore:
     def save(self, relative_path, has_face, centers=None, expected_colors=None):
         if has_face and (len(centers) != 9 or len(expected_colors) != 9):
             raise ValueError('Anotações positivas exigem nove centros e nove cores.')
+
 
 def grid_matches(annotated_centers, predicted_centers, tolerance_ratio=0.4):
     spacing = median_neighbor_spacing(annotated_centers)
@@ -95,6 +97,7 @@ def test_positive_annotation_requires_nine_clicks_then_nine_colors():
         controller.add_color(color)
     assert store.records['hard.png']['expected_colors'] == list('WYGBROWYG')
 
+
 def test_negative_annotation_persists_without_centers():
     controller.mark_negative()
     assert store.records['hard.png'] == {'has_face': False}
@@ -109,12 +112,25 @@ Expected: import failure because `AnnotationController` does not exist.
 - [ ] **Step 3: Implement the controller and CLI**
 
 ```python
-COLOR_KEYS = {ord('w'): 'W', ord('y'): 'Y', ord('g'): 'G', ord('b'): 'B', ord('r'): 'R', ord('o'): 'O'}
+COLOR_KEYS = {
+    ord('w'): 'W',
+    ord('y'): 'Y',
+    ord('g'): 'G',
+    ord('b'): 'B',
+    ord('r'): 'R',
+    ord('o'): 'O',
+}
+
 
 def run_annotation(input_dir='data/to_annotate', output='data/annotations.json'):
     for image_path in AnnotationStore(output).pending_images(input_dir):
         controller = AnnotationController(relative_path(image_path, input_dir), store)
-        cv2.setMouseCallback('Annotate', lambda event, x, y, *_: controller.add_center((x, y)) if event == cv2.EVENT_LBUTTONDOWN else None)
+        cv2.setMouseCallback(
+            'Annotate',
+            lambda event, x, y, *_: (
+                controller.add_center((x, y)) if event == cv2.EVENT_LBUTTONDOWN else None
+            ),
+        )
         # Key n saves False; y changes controller to center entry; r resets state;
         # q returns; COLOR_KEYS append labels after the ninth center.
 ```
@@ -147,6 +163,7 @@ def test_negative_annotation_counts_a_predicted_grid_as_false_positive():
     metrics = evaluate_annotations([negative_record], detector_factory=AlwaysDetectDetector)
     assert metrics['face_precision'] == 0.0
 
+
 def test_positive_annotation_scores_grid_by_relative_tolerance():
     metrics = evaluate_annotations([positive_record], detector_factory=MatchingGridDetector)
     assert metrics['face_recall'] == 1.0
@@ -163,10 +180,17 @@ Expected: import failure because `evaluate_annotations` does not exist.
 
 ```python
 def evaluate_annotations(records, detector_factory=CubeDetector):
-    counts = {'true_positive': 0, 'false_positive': 0, 'false_negative': 0, 'grid_correct': 0, 'positive': 0}
+    counts = {
+        'true_positive': 0,
+        'false_positive': 0,
+        'false_negative': 0,
+        'grid_correct': 0,
+        'positive': 0,
+    }
     # A detected nine-cell grid is a positive prediction. Compare only positive
     # references with grid_matches; compare colors only for a correct grid.
     return rates_from_counts(counts)
+
 
 def write_report(results, output_dir='data/reports', manual_records=()):
     report = {'results': results, 'manual_annotations': evaluate_annotations(manual_records)}
