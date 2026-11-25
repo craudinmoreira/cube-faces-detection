@@ -4,7 +4,6 @@ import numpy as np
 
 from calibration import CalibrationTracker
 
-
 SAMPLE = np.tile(np.array([[100.0, 150.0, 200.0]]), (9, 1))
 
 

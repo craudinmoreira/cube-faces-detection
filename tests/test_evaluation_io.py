@@ -1,6 +1,6 @@
 import csv
-from collections import defaultdict
 import json
+from collections import defaultdict
 from types import SimpleNamespace
 
 import cv2
@@ -21,7 +21,9 @@ class FakeDetector:
 
     def process_frame(self, frame):
         self.debug_state = {'candidate_count': 9 if self.colors else 0}
-        self.last_grid_centers = [(10 + 20 * c, 10 + 20 * r) for r in range(3) for c in range(3)] if self.colors else []
+        self.last_grid_centers = (
+            [(10 + 20 * c, 10 + 20 * r) for r in range(3) for c in range(3)] if self.colors else []
+        )
         return frame, self.colors, None
 
 
@@ -48,7 +50,9 @@ def test_load_annotations_handles_missing_valid_and_invalid_files(tmp_path):
     path = tmp_path / 'annotations.json'
     assert evaluation.load_annotations(path) == []
 
-    path.write_text(json.dumps({'records': {'a.png': {'path': 'a.png', 'has_face': False}}}), encoding='utf-8')
+    path.write_text(
+        json.dumps({'records': {'a.png': {'path': 'a.png', 'has_face': False}}}), encoding='utf-8'
+    )
     assert evaluation.load_annotations(path) == [{'path': 'a.png', 'has_face': False}]
 
     path.write_text(json.dumps({'records': []}), encoding='utf-8')
@@ -57,9 +61,13 @@ def test_load_annotations_handles_missing_valid_and_invalid_files(tmp_path):
 
 
 def test_evaluate_records_scores_colors_and_skips_unreadable_frames(tmp_path):
-    session = write_session(tmp_path, 's1', [{'frame': 'a.png', 'color': 'W', 'expected_colors': ['W'] * 9}])
+    session = write_session(
+        tmp_path, 's1', [{'frame': 'a.png', 'color': 'W', 'expected_colors': ['W'] * 9}]
+    )
     records = evaluation.load_records(tmp_path)
-    records.append({'frame': 'missing.png', 'color': 'W', 'expected_colors': ['W'] * 9, '_directory': session})
+    records.append(
+        {'frame': 'missing.png', 'color': 'W', 'expected_colors': ['W'] * 9, '_directory': session}
+    )
     detected = ['W'] * 8 + ['Y']
 
     results = evaluation.evaluate_records(records, lambda **kw: FakeDetector(detected, **kw))
@@ -75,9 +83,13 @@ def test_evaluate_annotations_counts_false_positives_and_negatives(tmp_path):
     cv2.imwrite(str(tmp_path / 'neg.png'), np.zeros((8, 8, 3), np.uint8))
     records = [{'path': 'neg.png', 'has_face': False}]
 
-    with_face = evaluation.evaluate_annotations(records, tmp_path, lambda **kw: FakeDetector(['W'] * 9, **kw))
+    with_face = evaluation.evaluate_annotations(
+        records, tmp_path, lambda **kw: FakeDetector(['W'] * 9, **kw)
+    )
     without_face = evaluation.evaluate_annotations(
-        [{'path': 'neg.png', 'has_face': True, 'centers': []}], tmp_path, lambda **kw: FakeDetector(None, **kw)
+        [{'path': 'neg.png', 'has_face': True, 'centers': []}],
+        tmp_path,
+        lambda **kw: FakeDetector(None, **kw),
     )
 
     assert with_face['hsv_enhanced']['face_precision'] == 0.0
@@ -97,7 +109,10 @@ def test_write_report_saves_json_and_csv(tmp_path):
 
 
 def test_main_without_samples_exits_with_message(tmp_path, monkeypatch):
-    monkeypatch.setattr('sys.argv', ['evaluation.py', '--data', str(tmp_path), '--annotations', str(tmp_path / 'none.json')])
+    monkeypatch.setattr(
+        'sys.argv',
+        ['evaluation.py', '--data', str(tmp_path), '--annotations', str(tmp_path / 'none.json')],
+    )
 
     with pytest.raises(SystemExit, match='Nenhuma amostra'):
         evaluation.main()

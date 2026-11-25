@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 
-
 ALLOWED_COLORS = frozenset(('W', 'Y', 'G', 'B', 'R', 'O'))
 IMAGE_SUFFIXES = frozenset(('.png', '.jpg', '.jpeg', '.bmp', '.webp'))
 
@@ -34,7 +33,12 @@ class AnnotationStore:
         normalized_path = _validate_relative_path(relative_path)
         record = {'path': normalized_path, 'has_face': bool(has_face)}
         if has_face:
-            if centers is None or expected_colors is None or len(centers) != 9 or len(expected_colors) != 9:
+            if (
+                centers is None
+                or expected_colors is None
+                or len(centers) != 9
+                or len(expected_colors) != 9
+            ):
                 raise ValueError('Anotações positivas exigem nove centros e nove cores.')
             if any(color not in ALLOWED_COLORS for color in expected_colors):
                 raise ValueError('Anotação positiva contém cor inválida.')
@@ -58,7 +62,9 @@ class AnnotationStore:
     def _write(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open('w', encoding='utf-8') as file:
-            json.dump({'schema_version': 1, 'records': self.records}, file, indent=2, ensure_ascii=False)
+            json.dump(
+                {'schema_version': 1, 'records': self.records}, file, indent=2, ensure_ascii=False
+            )
 
 
 def grid_matches(annotated_centers, predicted_centers, tolerance_ratio=0.4):

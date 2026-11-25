@@ -1,6 +1,6 @@
-from collections import Counter
-from datetime import datetime, timezone
 import json
+from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 
 import cv2
@@ -14,13 +14,11 @@ class DataCollectionSession:
     DUPLICATE_DIFFERENCE_THRESHOLD = 6.0
 
     def __init__(self, root='data/collected', max_samples_per_color=None):
-        self.created_at = datetime.now(timezone.utc)
+        self.created_at = datetime.now(UTC)
         self.directory = Path(root) / self.created_at.strftime('%Y%m%dT%H%M%SZ')
         self.directory.mkdir(parents=True, exist_ok=False)
         self.max_samples_per_color = (
-            self.MAX_SAMPLES_PER_COLOR
-            if max_samples_per_color is None
-            else max_samples_per_color
+            self.MAX_SAMPLES_PER_COLOR if max_samples_per_color is None else max_samples_per_color
         )
         self._samples_by_color = Counter()
         self._fingerprints = {}
@@ -45,7 +43,9 @@ class DataCollectionSession:
         prefix = f'{center}_{sequence:02d}'
         frame_path = self.directory / f'{prefix}_frame.png'
         rectified_path = self.directory / f'{prefix}_rectified.png'
-        if not cv2.imwrite(str(frame_path), frame) or not cv2.imwrite(str(rectified_path), rectified_face):
+        if not cv2.imwrite(str(frame_path), frame) or not cv2.imwrite(
+            str(rectified_path), rectified_face
+        ):
             return False, 'Não foi possível gravar a amostra.'
 
         self._samples_by_color[center] += 1
@@ -58,12 +58,15 @@ class DataCollectionSession:
                 'observed_colors': list(colors),
                 'frame': frame_path.name,
                 'rectified_face': rectified_path.name,
-                'captured_at': datetime.now(timezone.utc).isoformat(),
+                'captured_at': datetime.now(UTC).isoformat(),
                 'metadata': metadata or {},
             }
         )
         self._write_manifest()
-        return True, f'Amostra {center} salva ({self._samples_by_color[center]}/{self.max_samples_per_color}).'
+        return (
+            True,
+            f'Amostra {center} salva ({self._samples_by_color[center]}/{self.max_samples_per_color}).',
+        )
 
     def progress(self):
         return dict(self._samples_by_color)
@@ -74,8 +77,7 @@ class DataCollectionSession:
 
     def _is_duplicate(self, color, fingerprint):
         return any(
-            float(np.mean(np.abs(fingerprint - previous)))
-            < self.DUPLICATE_DIFFERENCE_THRESHOLD
+            float(np.mean(np.abs(fingerprint - previous))) < self.DUPLICATE_DIFFERENCE_THRESHOLD
             for previous in self._fingerprints.get(color, [])
         )
 

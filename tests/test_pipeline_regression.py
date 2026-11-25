@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'scripts'))
 
 from bench_pipeline import FRAMES, synthetic_frame  # noqa: E402
+
 from vision import CubeDetector  # noqa: E402
 
 

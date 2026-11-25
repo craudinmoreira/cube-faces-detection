@@ -1,6 +1,7 @@
 from rubik.cube import Cube
 from rubik.solve import Solver
 
+
 def solve_cube(state_string):
     """
     Solves the Rubik's cube given a 54-character state string.
@@ -13,11 +14,12 @@ def solve_cube(state_string):
         c = Cube(state_string)
         solver = Solver(c)
         solver.solve()
-        
+
         # Moves are returned as a list of strings like ['U', 'R', "F'", ...]
         return solver.moves
     except Exception as e:
         return f"Error solving cube: {str(e)}"
+
 
 def solve_cube_kociemba(state_string):
     """
@@ -27,6 +29,7 @@ def solve_cube_kociemba(state_string):
     """
     try:
         import optimal.solver as sv
+
         solution = sv.solve(state_string)
         return solution
     except ImportError:

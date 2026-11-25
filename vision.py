@@ -1,8 +1,9 @@
-import cv2
-import numpy as np
 import json
 import os
 import warnings
+
+import cv2
+import numpy as np
 
 
 def parse_calibration_data(data):
@@ -37,6 +38,7 @@ def parse_calibration_data(data):
         raise ValueError("a calibração não contém centros LAB")
     return centers, legacy
 
+
 class ColorDetector:
     MAX_COLOR_DISTANCE = 80
     MIN_COLOR_MARGIN = 10
@@ -50,7 +52,7 @@ class ColorDetector:
             'Y': np.array([248, 106, 223]),
             'G': np.array([224, 42, 211]),
             'B': np.array([82, 207, 20]),
-            'W': np.array([255, 128, 128])
+            'W': np.array([255, 128, 128]),
         }
 
         if os.path.exists(calibration_path):
@@ -70,7 +72,7 @@ class ColorDetector:
                     f"Não foi possível carregar a calibração; usando centros padrão: {error}",
                     UserWarning,
                 )
-        
+
         # Used for drawing UI
         self.color_bgr = {
             'R': (0, 0, 255),
@@ -79,7 +81,7 @@ class ColorDetector:
             'G': (0, 255, 0),
             'B': (255, 0, 0),
             'W': (255, 255, 255),
-            'U': (128, 128, 128) # Unknown
+            'U': (128, 128, 128),  # Unknown
         }
 
     def detect_color(self, bgr_roi):
@@ -121,6 +123,7 @@ class ColorDetector:
         """Classify a LAB value only when its nearest reference is decisive."""
         return self.classify_distances(self.color_distances_lab(lab_color))
 
+
 class CubeDetector:
     COLOR_PREPROCESSING_MODES = ('original', 'gray_world', 'hsv_enhanced')
     GRID_SCORE_THRESHOLD = 0.78
@@ -149,15 +152,15 @@ class CubeDetector:
         edges = cv2.Canny(blurred, 10, 30)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         dilated = cv2.dilate(edges, kernel, iterations=1)
-        
+
         contours, _ = cv2.findContours(dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        
+
         frame_area = frame.shape[0] * frame.shape[1]
         square_contours = []
         for contour in contours:
             perimeter = cv2.arcLength(contour, True)
             approx = cv2.approxPolyDP(contour, 0.03 * perimeter, True)
-            
+
             if len(approx) == 4 and cv2.isContourConvex(approx):
                 area = cv2.contourArea(contour)
                 if self._has_plausible_area(area, frame_area):
@@ -202,7 +205,9 @@ class CubeDetector:
         """Score an ordered, near-frontal 3x3 candidate grid from 0 to 1."""
         ordered_by_y = sorted(group, key=lambda item: self._candidate_center(item)[1])
         rows = [
-            sorted(ordered_by_y[index:index + 3], key=lambda item: self._candidate_center(item)[0])
+            sorted(
+                ordered_by_y[index : index + 3], key=lambda item: self._candidate_center(item)[0]
+            )
             for index in range(0, 9, 3)
         ]
         centers = np.array(
@@ -275,15 +280,8 @@ class CubeDetector:
         centers = []
         for approx, area, bbox in best_group:
             x, y, w, h = bbox
-            centers.append({
-                'approx': approx,
-                'bbox': bbox,
-                'cx': x + w//2,
-                'cy': y + h//2
-            })
-        self.last_grid_centers = [
-            (float(face['cx']), float(face['cy'])) for face in centers
-        ]
+            centers.append({'approx': approx, 'bbox': bbox, 'cx': x + w // 2, 'cy': y + h // 2})
+        self.last_grid_centers = [(float(face['cx']), float(face['cy'])) for face in centers]
         return centers
 
     def _rectify_face(self, frame, sorted_faces):
@@ -292,9 +290,7 @@ class CubeDetector:
             self.debug_state['rejection_reason'] = 'A grade nao possui nove pecas.'
             return None
 
-        source_points = np.float32(
-            [[face['cx'], face['cy']] for face in sorted_faces]
-        )
+        source_points = np.float32([[face['cx'], face['cy']] for face in sorted_faces])
         target_points = np.float32(
             [
                 [
@@ -345,28 +341,35 @@ class CubeDetector:
             roi_x = column * self.RECTIFIED_CELL_SIZE + roi_offset
             roi_y = row * self.RECTIFIED_CELL_SIZE + roi_offset
             roi = rectified_face[
-                roi_y:roi_y + self.RECTIFIED_ROI_SIZE,
-                roi_x:roi_x + self.RECTIFIED_ROI_SIZE,
+                roi_y : roi_y + self.RECTIFIED_ROI_SIZE,
+                roi_x : roi_x + self.RECTIFIED_ROI_SIZE,
             ]
             rois.append(roi)
             cx = int(round(face_data['cx']))
             cy = int(round(face_data['cy']))
-            
+
             if not calibration_mode:
                 detected_color, distances = self.color_detector.detect_color_with_distances(roi)
                 face_colors.append(detected_color)
                 color_costs.append(distances)
-                
-                bgr_color = self.color_detector.color_bgr.get(detected_color, (255,255,255))
+
+                bgr_color = self.color_detector.color_bgr.get(detected_color, (255, 255, 255))
                 cv2.drawContours(annotated_frame, [approx], -1, bgr_color, 3)
                 cv2.circle(annotated_frame, (cx, cy), 5, bgr_color, -1)
-                cv2.putText(annotated_frame, detected_color, (x, y - 10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, bgr_color, 2)
+                cv2.putText(
+                    annotated_frame,
+                    detected_color,
+                    (x, y - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    bgr_color,
+                    2,
+                )
             else:
                 face_colors.append('U')
                 cv2.drawContours(annotated_frame, [approx], -1, (255, 255, 255), 3)
                 cv2.circle(annotated_frame, (cx, cy), 5, (255, 255, 255), -1)
-                
+
         self.last_color_costs = color_costs if not calibration_mode else None
         return face_colors, rois
 
@@ -397,17 +400,17 @@ class CubeDetector:
         """
         # Convert to HSV (using float32 to prevent overflow during multiplication)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV).astype(np.float32)
-        
+
         # Boost saturation by 40%
         hsv[:, :, 1] = hsv[:, :, 1] * 1.4
-        
+
         # Slightly boost value (brightness/contrast) to make colors pop
         hsv[:, :, 2] = hsv[:, :, 2] * 1.1
-        
+
         # Clip values to ensure they stay within the valid 0-255 range
         hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
         hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)
-        
+
         # Convert back to BGR
         enhanced_frame = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
         return enhanced_frame
@@ -423,7 +426,7 @@ class CubeDetector:
         self.debug_views = {}
         self.last_color_costs = None
         self.last_grid_centers = []
-        
+
         square_contours = self._find_squares(frame)
         self.debug_state['candidate_count'] = len(square_contours)
         if self.debug:
@@ -433,7 +436,7 @@ class CubeDetector:
             self.debug_views['Candidatos'] = candidates_view
 
         sorted_faces = self._group_and_sort_squares(square_contours)
-        
+
         if sorted_faces:
             face_colors, rois = self._extract_colors_and_draw(
                 color_frame, annotated_frame, sorted_faces, calibration_mode
