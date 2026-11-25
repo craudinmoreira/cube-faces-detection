@@ -105,7 +105,8 @@ git, porque depende da câmera e da luz de cada máquina.
 
 Versões e notas: [docs/releases.md](docs/releases.md) (`python main.py --version`).
 
-Para contribuir, instale os hooks (`uv run pre-commit install`); o que eles e o
+Para contribuir, veja o [CONTRIBUTING.md](CONTRIBUTING.md). Agentes de IA seguem o
+[AGENTS.md](AGENTS.md) ([fluxo](docs/ai-workflow.md)). Instale os hooks (`uv run pre-commit install`); o que eles e o
 CI verificam está em [docs/ci.md](docs/ci.md).
 
 Testes (detalhes em [docs/testing.md](docs/testing.md)):

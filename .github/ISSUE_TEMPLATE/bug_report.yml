@@ -1,0 +1,35 @@
+name: Bug
+description: Algo não funciona como deveria.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        **Não anexe fotos da câmera** que mostrem pessoas, rostos ou o ambiente.
+        Se a imagem ajudar, recorte só o cubo.
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu
+      description: O que você fez, o que esperava e o que aconteceu.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. uv run python main.py --debug
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versão
+      description: Saída de `uv run python main.py --version`, ou o commit.
+  - type: input
+    id: env
+    attributes:
+      label: Ambiente
+      placeholder: Windows 11, Python 3.13, webcam USB 1080p, luz fluorescente
