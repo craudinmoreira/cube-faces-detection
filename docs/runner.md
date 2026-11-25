@@ -47,5 +47,7 @@ próprio arquivo.
   nenhum job casa com o runner.
 - O `stop` apaga **todos** os registros com o prefixo desta máquina, inclusive
   os que estão online, porque o container já foi destruído.
-- Para atualizar o runner, troque a tag e o digest no `Dockerfile` (o
-  Dependabot não acompanha esse arquivo) e rode `runner.sh build`.
+- O Dependabot abre PR quando sai uma imagem nova do runner (tag e digest no
+  `Dockerfile`). Depois do merge, rode `runner.sh build` (ou `start`) para
+  reconstruir a imagem local. Com `--disableupdate`, um runner muito antigo é
+  recusado pelo GitHub em vez de se atualizar sozinho.
